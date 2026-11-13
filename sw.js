@@ -1,13 +1,18 @@
 // Permite usar la app sin conexión (pabellones sin cobertura).
-// Cambia la versión al modificar los archivos para que se actualicen.
-const CACHE = 'hoquei-v5';
+//
+// La app se abre SIEMPRE desde la copia guardada en el dispositivo: es
+// instantánea con o sin red. Para publicar cambios hay que subir la versión
+// de CACHE: el navegador detecta este archivo nuevo, descarga todo en segundo
+// plano y la versión nueva aparece la próxima vez que se abra la app.
+const CACHE = 'hoquei-v6';
 const FILES = [
   './', './index.html', './styles.css', './app.js', './manifest.webmanifest',
   './crest.png', './icon-192.png', './icon-512.png', './icon-maskable.png', './apple-touch-icon.png',
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)));
+  // cache: 'reload' evita copiar versiones antiguas de la caché HTTP
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))));
   self.skipWaiting();
 });
 
@@ -18,16 +23,8 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Red primero (para recibir cambios), caché si no hay conexión
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(
-    fetch(e.request)
-      .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy));
-        return res;
-      })
-      .catch(() => caches.match(e.request))
-  );
+  const req = e.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  e.respondWith(caches.match(req, { ignoreSearch: true }).then((cached) => cached || fetch(req)));
 });

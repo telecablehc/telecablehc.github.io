@@ -9,6 +9,7 @@ const PLAYERS = [
   { num: 9, name: 'Nuri' },
   { num: 17, name: 'Mariona' },
   { num: 18, name: 'Candela' },
+  { num: 23, name: 'Aine' },
   { num: 26, name: 'Ana Catarina' },
   { num: 43, name: 'Laia' },
   { num: 66, name: 'Ainara' },
@@ -88,6 +89,17 @@ function store(key, value) {
 let S = load(KEY_SESSION, null);
 if (!S || S.version !== VERSION) S = newSession();
 const save = () => store(KEY_SESSION, S);
+
+// Jugadoras añadidas a la plantilla después de crear la sesión guardada
+PLAYERS.forEach((p, i) => {
+  if (S.players.some((x) => x.num === p.num)) return;
+  const nParts = S.partMs.length;
+  S.players.splice(i, 0, {
+    ...p, called: S.mode === 'entreno', on: false,
+    ms: Array(nParts).fill(0), since: 0, stints: [],
+  });
+  save();
+});
 
 // Nombre antiguo del equipo (versión anterior de la app)
 if (S.info.team === 'Sporting CP') { S.info.team = TEAM; save(); }

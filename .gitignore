@@ -1,0 +1,9 @@
+# Solo se publican los archivos de la app
+*
+!.gitignore
+!index.html
+!app.js
+!styles.css
+!sw.js
+!manifest.webmanifest
+!icon.svg

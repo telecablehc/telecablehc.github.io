@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Hockey · Estadística</title>
+  <meta name="theme-color" content="#0f3d5e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Hockey">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="top">
+      <div class="seg" id="modeSeg">
+        <button data-mode="partido">Partido</button>
+        <button data-mode="entreno">Entreno</button>
+      </div>
+      <div class="spacer"></div>
+      <button class="icon-btn" id="btnUndo" title="Deshacer">↶</button>
+      <button class="icon-btn" id="btnHistory" title="Historial">☰</button>
+      <button class="icon-btn" id="btnSettings" title="Ajustes">⚙</button>
+    </header>
+
+    <!-- Panel fijo: reloj, marcador, posesión -->
+    <section class="clock">
+      <div class="clock-info">
+        <div id="partLabel" class="part">1ª parte</div>
+        <div id="clock" class="time">00:00</div>
+        <div id="remaining" class="sub"></div>
+      </div>
+      <div class="score">
+        <div class="team" id="teamName">Nosotras</div>
+        <div class="goals"><span id="scoreUs">0</span><span class="dash">–</span><span id="scoreThem">0</span></div>
+        <div class="team" id="rivalName">Rival</div>
+      </div>
+      <button id="btnPlay" class="play">▶</button>
+
+      <div class="clock-row">
+        <div class="poss">
+          <span class="lbl">Posesión</span>
+          <button data-poss="us">Nosotras <b id="possUs">0%</b></button>
+          <button data-poss="them">Rival <b id="possThem">0%</b></button>
+        </div>
+        <div class="fouls" title="Faltas de equipo en esta parte">FE <b id="foulsUs">0</b> · <b id="foulsThem">0</b></div>
+        <div class="spacer"></div>
+        <button id="btnNextPart" class="ghost">Fin de parte</button>
+        <button id="btnFinish" class="ghost danger">Terminar</button>
+      </div>
+      <div id="activeSanctions" class="chips"></div>
+    </section>
+
+    <main>
+      <!-- Pista -->
+      <section id="tab-pista" class="tab">
+        <div class="actions">
+          <button data-act="golFavor" class="act good">Gol a favor</button>
+          <button data-act="golContra" class="act bad">Gol en contra</button>
+          <button data-act="faltaNuestra" class="act">Falta nuestra</button>
+          <button data-act="faltaRival" class="act">Falta rival</button>
+          <button data-act="bolaParada" class="act">Falta directa / Penalti</button>
+          <button data-act="tarjeta" class="act warn">Tarjeta</button>
+        </div>
+
+        <h2>En pista <span id="onCount" class="count">0</span></h2>
+        <div id="onCourt" class="grid"></div>
+        <p id="onEmpty" class="hint">Toca una jugadora del banquillo para meterla en pista.</p>
+
+        <h2>Banquillo</h2>
+        <div id="bench" class="grid"></div>
+      </section>
+
+      <!-- Eventos -->
+      <section id="tab-eventos" class="tab" hidden>
+        <div id="eventList"></div>
+      </section>
+
+      <!-- Resumen -->
+      <section id="tab-resumen" class="tab" hidden>
+        <div class="tab-actions">
+          <button id="btnPrint" class="primary">Imprimir / PDF</button>
+          <button id="btnCsv" class="ghost">CSV minutos</button>
+        </div>
+        <div id="summary"></div>
+      </section>
+
+      <!-- Datos del partido -->
+      <section id="tab-datos" class="tab" hidden>
+        <div class="form">
+          <label>Nuestro equipo <input data-info="team" type="text"></label>
+          <label>Rival <input data-info="rival" type="text"></label>
+          <label>Competición <input data-info="competicion" type="text"></label>
+          <label>Jornada <input data-info="jornada" type="text"></label>
+          <label>Partido oficial nº <input data-info="numero" type="text" inputmode="numeric"></label>
+          <label>Fecha <input data-info="fecha" type="date"></label>
+          <label>Hora <input data-info="hora" type="time"></label>
+        </div>
+        <h2>Convocadas</h2>
+        <div id="calledList" class="called"></div>
+        <h2>Observaciones</h2>
+        <textarea data-info="notas" rows="6" placeholder="Notas del partido…"></textarea>
+      </section>
+    </main>
+
+    <nav class="tabs">
+      <button data-tab="pista" class="active">Pista</button>
+      <button data-tab="eventos">Eventos</button>
+      <button data-tab="resumen">Resumen</button>
+      <button data-tab="datos">Datos</button>
+    </nav>
+  </div>
+
+  <!-- Diálogo genérico para registrar acciones -->
+  <dialog id="dlgAsk">
+    <h3 id="askTitle"></h3>
+    <div id="askBody"></div>
+    <div class="dlg-actions">
+      <button type="button" id="askCancel" class="ghost">Cancelar</button>
+      <button type="button" id="askOk" class="primary">Guardar</button>
+    </div>
+  </dialog>
+
+  <dialog id="dlgSettings">
+    <form method="dialog">
+      <h3>Ajustes</h3>
+      <label class="field">Duración de cada parte (min, 0 = sin límite)
+        <input id="partLen" type="number" min="0" max="90" inputmode="numeric">
+      </label>
+      <label class="field">Número de partes
+        <input id="partsNum" type="number" min="1" max="6" inputmode="numeric">
+      </label>
+      <div class="dlg-actions">
+        <button type="button" id="btnReset" class="ghost danger">Reiniciar sesión</button>
+        <button value="ok" class="primary">Cerrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlgResults">
+    <form method="dialog">
+      <div id="resBody" class="res-body"></div>
+      <div class="dlg-actions">
+        <button type="button" id="resPrint" class="ghost">Imprimir / PDF</button>
+        <button type="button" id="resCsv" class="ghost">CSV minutos</button>
+        <button value="ok" class="primary">Cerrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlgHistory">
+    <form method="dialog">
+      <h3>Historial</h3>
+      <div id="histList"></div>
+      <div class="dlg-actions">
+        <span></span>
+        <button value="ok" class="primary">Cerrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast"></div>
+  <div id="printArea"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

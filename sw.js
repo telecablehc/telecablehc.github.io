@@ -1,6 +1,6 @@
 // Permite usar la app sin conexión (pabellones sin cobertura).
 // Cambia la versión al modificar los archivos para que se actualicen.
-const CACHE = 'hoquei-v3';
+const CACHE = 'hoquei-v4';
 const FILES = [
   './', './index.html', './styles.css', './app.js', './manifest.webmanifest',
   './crest.png', './icon-192.png', './icon-512.png', './icon-maskable.png', './apple-touch-icon.png',

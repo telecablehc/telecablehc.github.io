@@ -109,6 +109,13 @@ input, textarea { font: inherit; user-select: text; -webkit-user-select: text; }
 .primary { background: var(--brand); color: #fff; border: 0; border-radius: 10px; padding: 10px 18px; }
 .primary:disabled { opacity: .4; }
 
+.banner {
+  width: 100%; margin-top: 12px; padding: 14px; border-radius: 12px; border: 0;
+  background: var(--amber); color: #1a1a1a; font-weight: 700;
+}
+.pick-btn:disabled { opacity: .35; }
+#calledList { margin: 4px 4px 10px; }
+
 /* Botones de acción */
 .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
 @media (min-width: 1000px) { .actions { grid-template-columns: repeat(6, 1fr); } }

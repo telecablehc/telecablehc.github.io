@@ -18,6 +18,7 @@ const PLAYERS = [
 const TEAM = 'Telecable HC';
 const VERSION = 2;
 const MAX_ON_COURT = 5; // 4 jugadoras + portera
+const MAX_CALLED = 10;  // convocadas por partido
 const CARDS = {
   azul: { label: 'Tarjeta azul', min: 2 },
   roja: { label: 'Tarjeta roja', min: 4 },
@@ -44,8 +45,9 @@ function today() {
 
 function newSession(mode = 'partido', prev = null) {
   const same = prev && prev.mode === mode;
-  const called = {};
-  if (prev) prev.players.forEach((p) => (called[p.num] = p.called));
+  // Partido: se propone la convocatoria del partido anterior (máx. 10). Entreno: todas.
+  const prevSquad = prev && prev.mode === 'partido' ? prev.players.filter((p) => p.called).map((p) => p.num) : null;
+  const squad = mode === 'entreno' ? PLAYERS.map((p) => p.num) : (prevSquad || PLAYERS.map((p) => p.num)).slice(0, MAX_CALLED);
   return {
     version: VERSION,
     mode,
@@ -69,8 +71,9 @@ function newSession(mode = 'partido', prev = null) {
     poss: null,        // 'us' | 'them' | null
     starters: [],      // cinco inicial de cada parte
     players: PLAYERS.map((p) => ({
-      ...p, called: called[p.num] ?? true, on: false, ms: [0], since: 0, stints: [],
+      ...p, called: squad.includes(p.num), on: false, ms: [0], since: 0, stints: [],
     })),
+    squadOk: mode === 'entreno', // en partido hay que confirmar la convocatoria
     events: [],        // goles, faltas, bolas paradas y sanciones (en orden)
   };
 }
@@ -180,6 +183,7 @@ function togglePlayer(num) {
 // ---------- Acciones del reloj ----------
 
 function togglePlay() {
+  if (!S.running && !S.squadOk) { openSquad(); return; }
   action(() => {
     if (S.running) {
       commit();
@@ -241,6 +245,8 @@ function finish() {
   render();
   updateWakeLock();
   showRecord(record);
+  // al cerrar el resumen, se prepara el siguiente partido
+  $('dlgResults').addEventListener('close', () => { if (!S.squadOk) openSquad(); }, { once: true });
 }
 
 function undo() {
@@ -257,6 +263,7 @@ function setMode(mode) {
   S = newSession(mode, S);
   save();
   render();
+  if (!S.squadOk) openSquad();
 }
 
 // ---------- Sanciones (superioridad / inferioridad) ----------
@@ -565,6 +572,7 @@ function render() {
   const isMatch = S.mode === 'partido';
   $('onCount').textContent = isMatch ? `${on.length}/${MAX_ON_COURT}` : on.length;
   $('onCount').classList.toggle('over', isMatch && on.length > MAX_ON_COURT);
+  $('btnSquad').hidden = S.squadOk;
 
   // Sanciones activas
   $('activeSanctions').replaceChildren(...activeSanctions().map((e) => {
@@ -581,7 +589,85 @@ function render() {
   if (currentTab === 'eventos') renderEvents();
   if (currentTab === 'resumen') renderSummary();
   if (currentTab === 'datos') renderDatos();
+  if (currentTab === 'totales') renderTotals();
   tick();
+}
+
+// ---------- Convocatoria ----------
+
+function openSquad() {
+  const selected = new Set(S.players.filter((p) => p.called).map((p) => p.num));
+  const limit = S.mode === 'partido' ? MAX_CALLED : PLAYERS.length;
+
+  function draw() {
+    $('squadCount').textContent = `${selected.size}/${limit}`;
+    $('squadList').replaceChildren(...S.players.map((p) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const sel = selected.has(p.num);
+      b.className = 'pick-btn' + (sel ? ' active' : '');
+      b.disabled = !sel && selected.size >= limit;
+      b.innerHTML = `<b>${p.num}</b><span></span>`;
+      b.querySelector('span').textContent = p.name;
+      b.onclick = () => {
+        sel ? selected.delete(p.num) : selected.add(p.num);
+        draw();
+      };
+      return b;
+    }));
+    $('squadOk').disabled = selected.size === 0;
+  }
+
+  $('squadHint').textContent = S.mode === 'partido'
+    ? `Elige las ${MAX_CALLED} jugadoras que van al acta del partido.`
+    : 'Elige las jugadoras del entreno.';
+  $('squadOk').onclick = () => {
+    action(() => {
+      commit();
+      S.players.forEach((p) => {
+        p.called = selected.has(p.num);
+        if (!p.called) setOn(p, false);
+      });
+      S.squadOk = true;
+    });
+    $('dlgSquad').close();
+  };
+  draw();
+  $('dlgSquad').showModal();
+}
+
+// ---------- Totales por jugadora (partidos terminados) ----------
+
+function renderTotals() {
+  const games = load(KEY_HISTORY, []).filter((r) => r.mode === 'partido');
+  const rows = PLAYERS.map((pl) => {
+    let conv = 0, played = 0, starter = 0, ms = 0, goals = 0;
+    games.forEach((r) => {
+      const p = findPlayer(r, pl.num);
+      if (!p || !p.called) return;
+      conv++;
+      const t = sum(p.ms);
+      if (t > 0) played++;
+      if ((r.starters[0] || []).includes(pl.num)) starter++;
+      ms += t;
+      goals += r.events.filter((e) => e.type === 'gol' && e.side === 'favor' && e.num === pl.num).length;
+    });
+    return `<tr><td>${pl.num}</td><td>${escapeHtml(pl.name)}</td><td>${conv}</td><td><b>${played}</b></td>
+      <td>${starter}</td><td>${fmtLong(ms)}</td><td>${played ? fmt(ms / played) : '—'}</td><td>${goals}</td></tr>`;
+  });
+  $('totals').innerHTML = `
+    <p class="meta">Partidos terminados: <b>${games.length}</b> (los entrenos no cuentan)</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Nº</th><th>Nombre</th><th>Convocada</th><th>Jugados</th><th>Titular</th>
+      <th>Minutos</th><th>Media / partido</th><th>Goles</th></tr></thead>
+      <tbody>${rows.join('')}</tbody>
+    </table></div>`;
+}
+
+// Tiempo largo en h:mm:ss si pasa de una hora
+function fmtLong(ms) {
+  const s = Math.floor(ms / 1000);
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${fmt((s % 3600) * 1000)}` : fmt(ms);
 }
 
 // Actualiza solo los textos de tiempo (varias veces por segundo)
@@ -676,20 +762,10 @@ function renderDatos() {
   document.querySelectorAll('[data-info]').forEach((el) => {
     if (el !== document.activeElement) el.value = S.info[el.dataset.info] || '';
   });
-  $('calledList').replaceChildren(...S.players.map((p) => {
-    const l = document.createElement('label');
-    const c = document.createElement('input');
-    c.type = 'checkbox';
-    c.checked = p.called;
-    c.onchange = () => action(() => {
-      commit();
-      const pl = findPlayer(S, p.num);
-      pl.called = c.checked;
-      if (!pl.called) setOn(pl, false);
-    });
-    l.append(c, `${p.num} · ${p.name}`);
-    return l;
-  }));
+  const called = S.players.filter((p) => p.called);
+  $('calledList').textContent = called.length
+    ? `${called.length}: ${called.map((p) => `${p.num} ${p.name}`).join(', ')}`
+    : 'Sin convocadas';
 }
 
 // ---------- Resumen (equivalente a la hoja Excel) ----------
@@ -949,6 +1025,8 @@ $('btnNextPart').onclick = nextPart;
 $('btnFinish').onclick = finish;
 $('btnSettings').onclick = openSettings;
 $('btnHistory').onclick = showHistory;
+$('btnSquad').onclick = openSquad;
+$('btnSquad2').onclick = openSquad;
 $('btnPrint').onclick = () => { commit(); save(); printSummary(S); };
 $('btnCsv').onclick = () => { commit(); save(); exportCsv(S); };
 $('resPrint').onclick = () => currentRecord && printSummary(currentRecord);
@@ -978,6 +1056,8 @@ document.addEventListener('keydown', (ev) => {
 setInterval(tick, 250);
 render();
 updateWakeLock();
+// Al empezar un partido nuevo, lo primero es elegir las convocadas
+if (!S.squadOk && gameTotal() === 0 && !S.events.length) openSquad();
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js');

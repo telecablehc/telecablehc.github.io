@@ -57,6 +57,7 @@
     <main>
       <!-- Pista -->
       <section id="tab-pista" class="tab">
+        <button id="btnSquad" class="banner" hidden>Elige las convocadas del partido antes de empezar</button>
         <div class="actions">
           <button data-act="golFavor" class="act good">Gol a favor</button>
           <button data-act="golContra" class="act bad">Gol en contra</button>
@@ -100,9 +101,16 @@
           <label>Hora <input data-info="hora" type="time"></label>
         </div>
         <h2>Convocadas</h2>
-        <div id="calledList" class="called"></div>
+        <p id="calledList"></p>
+        <button id="btnSquad2" class="ghost">Cambiar convocatoria</button>
         <h2>Observaciones</h2>
         <textarea data-info="notas" rows="6" placeholder="Notas del partido…"></textarea>
+      </section>
+
+      <!-- Totales por jugadora -->
+      <section id="tab-totales" class="tab" hidden>
+        <h2>Totales por jugadora</h2>
+        <div id="totals"></div>
       </section>
     </main>
 
@@ -111,6 +119,7 @@
       <button data-tab="eventos">Eventos</button>
       <button data-tab="resumen">Resumen</button>
       <button data-tab="datos">Datos</button>
+      <button data-tab="totales">Totales</button>
     </nav>
   </div>
 
@@ -121,6 +130,16 @@
     <div class="dlg-actions">
       <button type="button" id="askCancel" class="ghost">Cancelar</button>
       <button type="button" id="askOk" class="primary">Guardar</button>
+    </div>
+  </dialog>
+
+  <dialog id="dlgSquad">
+    <h3>Convocatoria <span id="squadCount" class="count"></span></h3>
+    <p id="squadHint" class="hint"></p>
+    <div id="squadList" class="pick"></div>
+    <div class="dlg-actions">
+      <button type="button" class="ghost" onclick="this.closest('dialog').close()">Más tarde</button>
+      <button type="button" id="squadOk" class="primary">Confirmar</button>
     </div>
   </dialog>
 

@@ -15,6 +15,7 @@ const PLAYERS = [
   { num: 96, name: 'Maria' },
 ];
 
+const TEAM = 'Telecable HC';
 const VERSION = 2;
 const MAX_ON_COURT = 5; // 4 jugadoras + portera
 const CARDS = {
@@ -49,7 +50,7 @@ function newSession(mode = 'partido', prev = null) {
     version: VERSION,
     mode,
     info: {
-      team: prev ? prev.info.team : 'Sporting CP',
+      team: prev ? prev.info.team : TEAM,
       rival: '',
       competicion: prev ? prev.info.competicion : '',
       jornada: '',
@@ -84,6 +85,16 @@ function store(key, value) {
 let S = load(KEY_SESSION, null);
 if (!S || S.version !== VERSION) S = newSession();
 const save = () => store(KEY_SESSION, S);
+
+// Nombre antiguo del equipo (versión anterior de la app)
+if (S.info.team === 'Sporting CP') { S.info.team = TEAM; save(); }
+{
+  const h = load(KEY_HISTORY, []);
+  if (h.some((r) => r.info.team === 'Sporting CP')) {
+    h.forEach((r) => { if (r.info.team === 'Sporting CP') r.info.team = TEAM; });
+    store(KEY_HISTORY, h);
+  }
+}
 let undoStack = [];
 let currentTab = 'pista';
 
@@ -701,7 +712,7 @@ function summaryHtml(X) {
   const ev = (type) => X.events.filter((x) => x.type === type);
 
   // Datos
-  let h = `<h3>${e(X.info.team || 'Nosotras')} x ${e(X.info.rival || 'Rival')} — Resumen estadístico${
+  let h = `<img class="sum-logo" src="crest.png" alt=""><h3>${e(X.info.team || 'Nosotras')} x ${e(X.info.rival || 'Rival')} — Resumen estadístico${
     X.mode === 'entreno' ? ' (entreno)' : X.info.numero ? ` · Partido oficial nº ${e(X.info.numero)}` : ''}</h3>
     <p class="meta">Competición: <b>${e(X.info.competicion) || '—'}</b> · Fecha: <b>${fecha || '—'}</b> ·
     Jornada: <b>${e(X.info.jornada) || '—'}</b> · Hora: <b>${e(X.info.hora) || '—'}</b> ·

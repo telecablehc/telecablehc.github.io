@@ -1,7 +1,10 @@
 // Permite usar la app sin conexión (pabellones sin cobertura).
 // Cambia la versión al modificar los archivos para que se actualicen.
-const CACHE = 'hoquei-v2';
-const FILES = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'hoquei-v3';
+const FILES = [
+  './', './index.html', './styles.css', './app.js', './manifest.webmanifest',
+  './crest.png', './icon-192.png', './icon-512.png', './icon-maskable.png', './apple-touch-icon.png',
+];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)));

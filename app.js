@@ -2,14 +2,15 @@
 // Todos los datos se guardan solo en este dispositivo (localStorage).
 'use strict';
 
+// Orden de la plantilla en toda la app: primero 21 y 23, luego por número
 const PLAYERS = [
   { num: 21, name: 'Viki' },
+  { num: 23, name: 'Aine' },
   { num: 6, name: 'Piki' },
   { num: 8, name: 'Judith' },
   { num: 9, name: 'Nuri' },
   { num: 17, name: 'Mariona' },
   { num: 18, name: 'Candela' },
-  { num: 23, name: 'Aine' },
   { num: 26, name: 'Ana Catarina' },
   { num: 43, name: 'Laia' },
   { num: 66, name: 'Ainara' },
@@ -100,6 +101,14 @@ PLAYERS.forEach((p, i) => {
   });
   save();
 });
+
+// Ordena las jugadoras como en PLAYERS (las que ya no están en la plantilla, al final)
+function rosterOrder(players) {
+  const pos = (num) => { const i = PLAYERS.findIndex((p) => p.num === num); return i < 0 ? 999 + num : i; };
+  return [...players].sort((a, b) => pos(a.num) - pos(b.num));
+}
+S.players = rosterOrder(S.players);
+save();
 
 // Nombre antiguo del equipo (versión anterior de la app)
 if (S.info.team === 'Sporting CP') { S.info.team = TEAM; save(); }
@@ -791,7 +800,7 @@ function summaryHtml(X) {
   const sc = (i) => score(X, i).join('-');
   const nums = (arr) => (arr || []).map((n) => `${n} ${e(name(n))}`).join(', ') || '—';
   const fecha = X.info.fecha ? X.info.fecha.split('-').reverse().join('/') : '';
-  const called = X.players.filter((p) => p.called);
+  const called = rosterOrder(X.players.filter((p) => p.called));
   const table = (head, rows, empty = 'Sin datos') =>
     `<div class="tbl"><table><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${
       rows.length ? rows.join('') : `<tr><td colspan="${head.length}" class="empty">${empty}</td></tr>`

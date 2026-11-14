@@ -993,7 +993,96 @@ function showHistory() {
       return row;
     }));
   }
+  const last = load(KEY_BACKUP, null);
+  $('lastBackup').textContent = last
+    ? `Última copia: ${new Date(last).toLocaleDateString('es-ES')}.`
+    : 'Todavía no se ha hecho ninguna copia.';
   if (!$('dlgHistory').open) $('dlgHistory').showModal();
+}
+
+// ---------- Copia de seguridad ----------
+
+const KEY_BACKUP = 'hoquei.lastBackup';
+
+async function exportBackup() {
+  commit();
+  save();
+  const data = {
+    app: 'hoquei',
+    version: VERSION,
+    exportedAt: new Date().toISOString(),
+    history: load(KEY_HISTORY, []),
+    session: S,
+  };
+  const name = `telecable-copia-${today()}.json`;
+  const file = new File([JSON.stringify(data)], name, { type: 'application/json' });
+
+  // En móvil/tablet se abre el menú Compartir (Archivos, Drive, WhatsApp, correo…)
+  const touch = matchMedia('(pointer: coarse)').matches;
+  if (touch && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: name });
+    } catch (err) {
+      if (err.name === 'AbortError') return; // cancelado: no cuenta como copia
+      downloadFile(file);
+    }
+  } else {
+    downloadFile(file);
+  }
+  store(KEY_BACKUP, Date.now());
+  showHistory();
+  toast(`Copia exportada (${data.history.length} sesiones)`);
+}
+
+function downloadFile(file) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file);
+  a.download = file.name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// Añade al historial las sesiones de la copia que no estén ya (no borra nada)
+async function importBackup(file) {
+  let data;
+  try {
+    data = JSON.parse(await file.text());
+  } catch {
+    alert('Este archivo no es una copia válida.');
+    return;
+  }
+  if (!data || data.app !== 'hoquei' || !Array.isArray(data.history)) {
+    alert('Este archivo no es una copia de esta app.');
+    return;
+  }
+  const history = load(KEY_HISTORY, []);
+  const ids = new Set(history.map((r) => r.id));
+  const nuevos = data.history.filter((r) => r && r.id && !ids.has(r.id));
+  if (nuevos.length) {
+    history.push(...nuevos);
+    history.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
+    store(KEY_HISTORY, history);
+  }
+
+  // Partido en curso: solo si en este dispositivo no hay nada empezado
+  let session = false;
+  const backupSession = data.session;
+  const hasData = (x) => x && x.version === VERSION && (sum(x.partMs) > 0 || x.running || x.events.length > 0);
+  const empty = !hasData(S);
+  if (hasData(backupSession) && empty &&
+      confirm('La copia tiene un partido sin terminar. ¿Recuperarlo también?')) {
+    S = backupSession;
+    undoStack = [];
+    save();
+    session = true;
+  }
+
+  render();
+  showHistory();
+  const skipped = data.history.length - nuevos.length;
+  alert(`Copia importada: ${nuevos.length} sesiones añadidas` +
+    (skipped ? `, ${skipped} ya estaban` : '') +
+    (session ? ' y partido en curso recuperado.' : '.'));
 }
 
 // ---------- Ajustes ----------
@@ -1038,6 +1127,13 @@ $('btnFinish').onclick = finish;
 $('btnSettings').onclick = openSettings;
 $('btnHistory').onclick = showHistory;
 $('btnSquad').onclick = openSquad;
+$('btnExport').onclick = exportBackup;
+$('btnImport').onclick = () => $('importFile').click();
+$('importFile').onchange = (ev) => {
+  const f = ev.target.files[0];
+  ev.target.value = '';
+  if (f) importBackup(f);
+};
 $('btnSquad2').onclick = openSquad;
 $('btnPrint').onclick = () => { commit(); save(); printSummary(S); };
 $('btnCsv').onclick = () => { commit(); save(); exportCsv(S); };

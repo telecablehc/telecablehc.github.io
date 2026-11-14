@@ -218,6 +218,9 @@ th { background: var(--bg); font-weight: 600; white-space: nowrap; }
 td:nth-child(2) { text-align: left; }
 td.empty { color: var(--muted); text-align: center; }
 
+.backup { margin-top: 18px; padding-top: 4px; border-top: 2px solid var(--line); }
+.backup h4 { margin: 12px 0 4px; }
+.backup .row { display: flex; gap: 8px; flex-wrap: wrap; }
 .hist-item { display: flex; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .hist-item .open { flex: 1; text-align: left; background: none; border: 0; padding: 4px 0; }
 .hist-item small { color: var(--muted); display: block; }

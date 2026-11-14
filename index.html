@@ -174,6 +174,16 @@
     <form method="dialog">
       <h3>Historial</h3>
       <div id="histList"></div>
+
+      <div class="backup">
+        <h4>Copia de seguridad</h4>
+        <p class="hint">Guarda un archivo con todo el historial (y el partido en curso) para no perderlo si se estropea o cambia el dispositivo. <span id="lastBackup"></span></p>
+        <div class="row">
+          <button type="button" id="btnExport" class="primary">Exportar copia</button>
+          <button type="button" id="btnImport" class="ghost">Importar copia</button>
+          <input type="file" id="importFile" accept=".json,application/json" hidden>
+        </div>
+      </div>
       <div class="dlg-actions">
         <span></span>
         <button value="ok" class="primary">Cerrar</button>

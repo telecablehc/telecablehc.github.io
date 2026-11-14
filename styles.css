@@ -223,6 +223,18 @@ td.empty { color: var(--muted); text-align: center; }
 .backup { margin-top: 18px; padding-top: 4px; border-top: 2px solid var(--line); }
 .backup h4 { margin: 12px 0 4px; }
 .backup .row { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Totales */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 10px 0 4px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.tile span { font-size: 13px; color: var(--muted); }
+.tile b { font-size: 26px; font-variant-numeric: tabular-nums; }
+.tile small { font-size: 12px; color: var(--muted); }
+#totals h4 { margin: 20px 0 6px; color: var(--brand); }
+.res { display: inline-block; min-width: 22px; border-radius: 6px; padding: 0 5px; color: #fff; font-size: 12px; font-weight: 700; }
+.res-G { background: var(--on); }
+.res-E { background: var(--muted); }
+.res-P { background: var(--warn); }
+
 .hist-item { display: flex; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .hist-item .open { flex: 1; text-align: left; background: none; border: 0; padding: 4px 0; }
 .hist-item small { color: var(--muted); display: block; }

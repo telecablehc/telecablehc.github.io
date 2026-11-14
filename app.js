@@ -657,32 +657,123 @@ function openSquad() {
   $('dlgSquad').showModal();
 }
 
-// ---------- Totales por jugadora (partidos terminados) ----------
+// ---------- Totales de todos los partidos terminados ----------
+// Se recalcula cada vez que se abre la pestaña, así que incluye
+// automáticamente cada partido nuevo que se termina y guarda.
 
 function renderTotals() {
   const games = load(KEY_HISTORY, []).filter((r) => r.mode === 'partido');
+  const e = escapeHtml;
+  const n = games.length;
+  const avg = (x) => (n ? (x / n).toFixed(1).replace('.', ',') : '—');
+  const tr = (cells) => `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
+  const table = (head, rows) =>
+    `<div class="tbl"><table><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+
+  if (!n) {
+    $('totals').innerHTML = '<p class="hint">Todavía no hay partidos terminados. Al pulsar «Terminar» en un partido, sus datos se suman aquí.</p>';
+    return;
+  }
+
+  // --- Equipo ---
+  const T = {
+    w: 0, d: 0, l: 0, gf: 0, gc: 0, playMs: 0, possUs: 0, possThem: 0, feC: 0, feS: 0,
+    bp: { fd: { favor: [0, 0], contra: [0, 0] }, penalti: { favor: [0, 0], contra: [0, 0] } }, // [lanzados, goles]
+    azul: 0, roja: 0, pp: [0, 0, 0], up: [0, 0, 0], // [veces, goles a favor, goles en contra]
+  };
+  games.forEach((r) => {
+    const [us, them] = score(r);
+    T.gf += us; T.gc += them;
+    us > them ? T.w++ : us === them ? T.d++ : T.l++;
+    T.playMs += sum(r.partMs);
+    T.possUs += sum(r.possMs.map((x) => x[0]));
+    T.possThem += sum(r.possMs.map((x) => x[1]));
+    r.events.forEach((ev) => {
+      if (ev.type === 'falta') ev.side === 'nuestra' ? T.feC++ : T.feS++;
+      if (ev.type === 'bp') { const b = T.bp[ev.kind][ev.side]; b[0]++; if (ev.scored) b[1]++; }
+      if (ev.type === 'sancion') {
+        if (ev.side === 'nuestra') T[ev.card]++;
+        const end = ev.scoreEnd || score(r);
+        const acc = ev.side === 'rival' ? T.pp : T.up;
+        acc[0]++; acc[1] += end[0] - ev.scoreStart[0]; acc[2] += end[1] - ev.scoreStart[1];
+      }
+    });
+  });
+  const eff = ([shots, goals], side) => (shots ? pct(side === 'favor' ? goals : shots - goals, shots) : '—');
+  const bpRow = (label, kind) => {
+    const f = T.bp[kind].favor, c = T.bp[kind].contra;
+    return tr([label, `${f[0]} (${f[1]} gol)`, eff(f, 'favor'), `${c[0]} (${c[1]} encajados)`, eff(c, 'contra')]);
+  };
+
+  let h = `<p class="meta">Suma de los <b>${n}</b> partidos terminados (los entrenos no cuentan).</p>
+    <div class="tiles">
+      <div class="tile"><span>Partidos</span><b>${n}</b></div>
+      <div class="tile"><span>Ganados · Empatados · Perdidos</span><b>${T.w} · ${T.d} · ${T.l}</b></div>
+      <div class="tile"><span>Goles a favor</span><b>${T.gf}</b><small>${avg(T.gf)} por partido</small></div>
+      <div class="tile"><span>Goles en contra</span><b>${T.gc}</b><small>${avg(T.gc)} por partido</small></div>
+      <div class="tile"><span>Diferencia</span><b>${T.gf - T.gc > 0 ? '+' : ''}${T.gf - T.gc}</b></div>
+      <div class="tile"><span>Posesión media</span><b>${pct(T.possUs, T.playMs)}</b><small>Rival ${pct(T.possThem, T.playMs)}</small></div>
+    </div>`;
+
+  h += '<h4>Equipo</h4>';
+  h += table(['', 'Total', 'Media / partido'], [
+    tr(['Faltas de equipo cometidas', T.feC, avg(T.feC)]),
+    tr(['Faltas de equipo sufridas', T.feS, avg(T.feS)]),
+    tr(['Tarjetas azules', T.azul, avg(T.azul)]),
+    tr(['Tarjetas rojas', T.roja, avg(T.roja)]),
+    tr(['Superioridades (power play)', `${T.pp[0]} · goles +${T.pp[1]} / −${T.pp[2]}`, avg(T.pp[0])]),
+    tr(['Inferioridades (under play)', `${T.up[0]} · goles +${T.up[1]} / −${T.up[2]}`, avg(T.up[0])]),
+  ]);
+  h += table(['Balón parado', 'A favor', 'Eficacia ofensiva', 'En contra', 'Eficacia defensiva'], [
+    bpRow('Faltas directas', 'fd'),
+    bpRow('Penaltis', 'penalti'),
+  ]);
+
+  // --- Jugadoras ---
   const rows = PLAYERS.map((pl) => {
-    let conv = 0, played = 0, starter = 0, ms = 0, goals = 0;
+    const P = { conv: 0, played: 0, starter: 0, ms: 0, goals: 0, fouls: 0, azul: 0, roja: 0, bpShots: 0, bpGoals: 0 };
     games.forEach((r) => {
       const p = findPlayer(r, pl.num);
       if (!p || !p.called) return;
-      conv++;
+      P.conv++;
       const t = sum(p.ms);
-      if (t > 0) played++;
-      if ((r.starters[0] || []).includes(pl.num)) starter++;
-      ms += t;
-      goals += r.events.filter((e) => e.type === 'gol' && e.side === 'favor' && e.num === pl.num).length;
+      if (t > 0) P.played++;
+      if ((r.starters[0] || []).includes(pl.num)) P.starter++;
+      P.ms += t;
+      r.events.forEach((ev) => {
+        if (ev.num !== pl.num) return;
+        if (ev.type === 'gol' && ev.side === 'favor') P.goals++;
+        if (ev.type === 'falta' && ev.side === 'nuestra') P.fouls++;
+        if (ev.type === 'sancion' && ev.side === 'nuestra') P[ev.card]++;
+        if (ev.type === 'bp' && ev.side === 'favor') { P.bpShots++; if (ev.scored) P.bpGoals++; }
+      });
     });
-    return `<tr><td>${pl.num}</td><td>${escapeHtml(pl.name)}</td><td>${conv}</td><td><b>${played}</b></td>
-      <td>${starter}</td><td>${fmtLong(ms)}</td><td>${played ? fmt(ms / played) : '—'}</td><td>${goals}</td></tr>`;
+    return tr([
+      pl.num, e(pl.name), P.conv, `<b>${P.played}</b>`, P.starter,
+      fmtLong(P.ms), P.played ? fmt(P.ms / P.played) : '—', pct(P.ms, T.playMs),
+      `<b>${P.goals}</b>`, P.fouls, P.azul, P.roja, P.bpShots ? `${P.bpGoals}/${P.bpShots}` : '—',
+    ]);
   });
-  $('totals').innerHTML = `
-    <p class="meta">Partidos terminados: <b>${games.length}</b> (los entrenos no cuentan)</p>
-    <div class="tbl"><table>
-      <thead><tr><th>Nº</th><th>Nombre</th><th>Convocada</th><th>Jugados</th><th>Titular</th>
-      <th>Minutos</th><th>Media / partido</th><th>Goles</th></tr></thead>
-      <tbody>${rows.join('')}</tbody>
-    </table></div>`;
+  h += '<h4>Jugadoras</h4>';
+  h += table(['Nº', 'Nombre', 'Convocada', 'Jugados', 'Titular', 'Minutos', 'Media / partido', '% del tiempo',
+    'Goles', 'Faltas', 'Azules', 'Rojas', 'FD + penaltis (gol/lanz.)'], rows);
+
+  // --- Lista de partidos ---
+  h += '<h4>Partidos</h4>';
+  h += table(['Fecha', 'Rival', 'Competición', 'Resultado', ''], games.map((r) => {
+    const [us, them] = score(r);
+    const res = us > them ? 'G' : us === them ? 'E' : 'P';
+    return tr([
+      (r.info.fecha || '').split('-').reverse().join('/'), e(r.info.rival) || '—', e(r.info.competicion) || '—',
+      `<b>${us}-${them}</b> <span class="res res-${res}">${res}</span>`,
+      `<button class="ghost small" data-open="${e(r.id)}">Ver</button>`,
+    ]);
+  }));
+
+  $('totals').innerHTML = h;
+  $('totals').querySelectorAll('[data-open]').forEach((b) => {
+    b.onclick = () => showRecord(games.find((r) => r.id === b.dataset.open));
+  });
 }
 
 // Tiempo largo en h:mm:ss si pasa de una hora

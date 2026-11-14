@@ -1087,7 +1087,26 @@ async function importBackup(file) {
 
 // ---------- Ajustes ----------
 
+// Comprueba si la copia para usar sin internet está guardada en este dispositivo
+async function checkOffline() {
+  const el = $('offlineStatus');
+  let cache = null, files = 0;
+  try {
+    const keys = await caches.keys();
+    cache = keys.find((k) => k.startsWith('hoquei-')) || null;
+    if (cache) files = (await (await caches.open(cache)).keys()).length;
+  } catch {}
+  const sw = 'serviceWorker' in navigator && !!navigator.serviceWorker.controller;
+  const ok = sw && files >= 10;
+  el.className = 'hint ' + (ok ? 'ok' : 'bad');
+  el.textContent = ok
+    ? `✓ Lista para usar sin internet (${cache}). Dirección: ${location.host}`
+    : `✗ Todavía NO está lista para usar sin internet (${sw ? 'archivos: ' + files + '/10' : 'sin service worker'}). ` +
+      `Dirección: ${location.host}. Ábrela con internet, espera unos segundos, ciérrala y vuelve a abrirla.`;
+}
+
 function openSettings() {
+  checkOffline();
   $('partLen').value = S.partLen;
   $('partsNum').value = S.parts;
   $('dlgSettings').showModal();

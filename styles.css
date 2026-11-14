@@ -134,6 +134,8 @@ h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: v
 .count.over { color: var(--warn); }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .hint { color: var(--muted); font-size: 14px; margin: 4px; }
+.hint.ok { color: var(--on); font-weight: 600; }
+.hint.bad { color: var(--warn); font-weight: 600; }
 
 .card {
   display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: center; text-align: left;

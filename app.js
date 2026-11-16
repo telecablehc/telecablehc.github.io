@@ -89,7 +89,7 @@ function store(key, value) {
 
 let S = load(KEY_SESSION, null);
 if (!S || S.version !== VERSION) S = newSession();
-const save = () => store(KEY_SESSION, S);
+const save = () => { store(KEY_SESSION, S); cloudSessionChanged(); };
 
 // Jugadoras añadidas a la plantilla después de crear la sesión guardada
 PLAYERS.forEach((p, i) => {
@@ -259,6 +259,7 @@ function finish() {
   const history = load(KEY_HISTORY, []);
   history.unshift(record);
   store(KEY_HISTORY, history);
+  cloudMarkDirty(record.id);
 
   S = newSession(S.mode, S);
   undoStack = [];
@@ -1087,6 +1088,7 @@ function showHistory() {
       del.onclick = () => {
         if (!confirm('¿Borrar esta sesión del historial?')) return;
         store(KEY_HISTORY, load(KEY_HISTORY, []).filter((x) => x.id !== rec.id));
+        cloudMarkDeleted(rec.id);
         showHistory();
       };
       row.append(open, del);
@@ -1162,6 +1164,7 @@ async function importBackup(file) {
     history.push(...nuevos);
     history.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
     store(KEY_HISTORY, history);
+    nuevos.forEach((r) => cloudMarkDirty(r.id));
   }
 
   // Partido en curso: solo si en este dispositivo no hay nada empezado
@@ -1207,6 +1210,7 @@ async function checkOffline() {
 
 function openSettings() {
   checkOffline();
+  updateCloudUI();
   $('partLen').value = S.partLen;
   $('partsNum').value = S.parts;
   $('dlgSettings').showModal();
@@ -1284,7 +1288,12 @@ setInterval(tick, 250);
 render();
 updateWakeLock();
 // Al empezar un partido nuevo, lo primero es elegir las convocadas
-if (!S.squadOk && gameTotal() === 0 && !S.events.length) openSquad();
+function startupChecks() {
+  if (cloudLocked()) return;
+  if (!S.squadOk && gameTotal() === 0 && !S.events.length && !$('dlgSquad').open) openSquad();
+}
+cloudInit();      // cuenta y sincronización (cloud.js)
+startupChecks();
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js');

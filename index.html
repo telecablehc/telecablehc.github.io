@@ -15,7 +15,10 @@
 <body>
   <div id="app">
     <header class="top">
-      <img class="logo" src="crest.png" alt="Telecable HC">
+      <span class="logo-wrap">
+        <img class="logo" src="crest.png" alt="Telecable HC">
+        <span id="cloudDot" class="cloud-dot" title="Sincronización" hidden></span>
+      </span>
       <div class="seg" id="modeSeg">
         <button data-mode="partido">Partido</button>
         <button data-mode="entreno">Entreno</button>
@@ -152,6 +155,14 @@
       <label class="field">Número de partes
         <input id="partsNum" type="number" min="1" max="6" inputmode="numeric">
       </label>
+      <div id="cloudBox" hidden>
+        <h4>Cuenta</h4>
+        <p id="cloudInfo" class="hint"></p>
+        <div class="row-btns">
+          <button type="button" id="btnSync" class="ghost">Sincronizar ahora</button>
+          <button type="button" id="btnLogout" class="ghost danger">Cerrar sesión</button>
+        </div>
+      </div>
       <h4>Sin conexión</h4>
       <p id="offlineStatus" class="hint"></p>
       <div class="dlg-actions">
@@ -193,9 +204,26 @@
     </form>
   </dialog>
 
+  <!-- Pantalla de acceso (solo si la cuenta en la nube está configurada) -->
+  <div id="login" hidden>
+    <form id="loginForm" class="login-card">
+      <img src="crest.png" alt="" class="login-logo">
+      <h2 class="login-team">Telecable HC</h2>
+      <h3 id="loginTitle">Iniciar sesión</h3>
+      <input id="loginEmail" type="email" placeholder="Email" autocomplete="email" required>
+      <input id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password" required>
+      <button id="loginGo" class="primary">Entrar</button>
+      <p id="loginMsg" class="login-msg"></p>
+      <button type="button" id="loginSwitch" class="link">¿No tienes cuenta? Crear cuenta</button>
+      <button type="button" id="loginForgot" class="link">He olvidado la contraseña</button>
+    </form>
+  </div>
+
   <div id="toast"></div>
   <div id="printArea"></div>
 
+  <script src="supabase.min.js"></script>
+  <script src="cloud.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

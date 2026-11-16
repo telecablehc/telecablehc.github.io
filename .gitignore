@@ -3,6 +3,8 @@
 !.gitignore
 !index.html
 !app.js
+!cloud.js
+!supabase.min.js
 !styles.css
 !sw.js
 !manifest.webmanifest

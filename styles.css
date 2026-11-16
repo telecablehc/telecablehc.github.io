@@ -10,6 +10,11 @@
   --warn: #d64545;
   --amber: #c98a00;
   --blue: #2f6fdb;
+  --draw: #e07b00;
+  --win-bg: #e3f6ea;
+  --draw-bg: #fff0dc;
+  --loss-bg: #fde6e6;
+  --live-bg: #e4edfc;
   --radius: 14px;
 }
 @media (prefers-color-scheme: dark) {
@@ -25,6 +30,11 @@
     --warn: #ff6b6b;
     --amber: #f0b429;
     --blue: #6aa0ff;
+    --draw: #ff9f2e;
+    --win-bg: #12301f;
+    --draw-bg: #352510;
+    --loss-bg: #3a1717;
+    --live-bg: #14243f;
   }
 }
 
@@ -191,15 +201,21 @@ body:not(.in-game) { padding-bottom: calc(env(safe-area-inset-bottom) + 24px); }
   background: var(--panel); border: 1px solid var(--line); border-left: 5px solid var(--line);
   border-radius: 10px; padding: 10px 12px;
 }
-.fixture.done { border-left-color: var(--on); }
-.fixture.live { border-left-color: var(--amber); }
+/* Resultado: victoria verde, empate naranja, derrota rojo. En curso: azul */
+.fixture.win  { background: var(--win-bg);  border-color: var(--on); }
+.fixture.draw { background: var(--draw-bg); border-color: var(--draw); }
+.fixture.loss { background: var(--loss-bg); border-color: var(--warn); }
+.fixture.live { background: var(--live-bg); border-color: var(--blue); }
+.fixture.win .fx-state  { color: var(--on); }
+.fixture.draw .fx-state { color: var(--draw); }
+.fixture.loss .fx-state { color: var(--warn); }
+.fixture.live .fx-state { color: var(--blue); font-weight: 700; font-size: 15px; }
 .fx-j { font-weight: 800; color: var(--brand); min-width: 34px; font-variant-numeric: tabular-nums; }
 .fx-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .fx-main b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fx-main small { color: var(--muted); font-size: 13px; }
 .fx-state { font-size: 13px; color: var(--muted); white-space: nowrap; text-align: right; }
-.fixture.done .fx-state { color: var(--on); font-weight: 700; font-size: 15px; }
-.fixture.live .fx-state { color: var(--amber); font-weight: 700; font-size: 15px; }
+.fixture.done .fx-state { font-weight: 700; font-size: 15px; }
 #menuOther { margin-top: 4px; }
 
 #menuHist .hist-item { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; }
@@ -320,7 +336,7 @@ td.empty { color: var(--muted); text-align: center; }
 #totals h4 { margin: 20px 0 6px; color: var(--brand); }
 .res { display: inline-block; min-width: 22px; border-radius: 6px; padding: 0 5px; color: #fff; font-size: 12px; font-weight: 700; }
 .res-G { background: var(--on); }
-.res-E { background: var(--muted); }
+.res-E { background: var(--draw); }
 .res-P { background: var(--warn); }
 
 .hist-item { display: flex; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
@@ -362,3 +378,8 @@ td.empty { color: var(--muted); text-align: center; }
   #printArea h4 { color: #000; break-after: avoid; }
   #printArea .tbl { overflow: visible; break-inside: avoid; }
 }
+
+/* "Otros partidos" con el mismo color por resultado */
+#menuHist .hist-item.win  { background: var(--win-bg);  border-color: var(--on); }
+#menuHist .hist-item.draw { background: var(--draw-bg); border-color: var(--draw); }
+#menuHist .hist-item.loss { background: var(--loss-bg); border-color: var(--warn); }

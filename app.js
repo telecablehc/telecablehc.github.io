@@ -1033,8 +1033,11 @@ function renderCalendar(history) {
   list.replaceChildren(...CALENDARIO.map((f) => {
     const rec = recordForFixture(f, history);
     const live = isStarted() && S.mode === 'partido' && S.info.fixtureId === f.id;
+    // color por resultado: el registrado en la app o, si no hay, el oficial de la RFEP
+    const goals = rec ? score(rec) : f.resultado ? f.resultado.split('-').map(Number) : null;
+    const outcome = live || !goals ? '' : goals[0] > goals[1] ? ' win' : goals[0] === goals[1] ? ' draw' : ' loss';
     const b = document.createElement('button');
-    b.className = 'fixture' + (rec ? ' done' : live ? ' live' : '');
+    b.className = 'fixture' + (rec ? ' done' : live ? ' live' : '') + outcome;
     b.innerHTML = `
       <span class="fx-j">J${f.jornada}</span>
       <span class="fx-main"><b></b><small></small></span>
@@ -1294,7 +1297,8 @@ function renderHistory(mode, list, filter = () => true) {
   } else {
     list.replaceChildren(...history.map((rec) => {
       const row = document.createElement('div');
-      row.className = 'hist-item';
+      const [us, them] = score(rec);
+      row.className = 'hist-item' + (rec.mode !== 'partido' ? '' : us > them ? ' win' : us === them ? ' draw' : ' loss');
       const open = document.createElement('button');
       open.type = 'button';
       open.className = 'open';

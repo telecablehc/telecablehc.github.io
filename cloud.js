@@ -11,8 +11,10 @@
 'use strict';
 
 const CLOUD = {
-  url: '', // p. ej. https://abcdefgh.supabase.co   (Project Settings → API → Project URL)
-  key: '', // clave "anon public"                     (Project Settings → API → anon public)
+  // Proyecto Supabase del equipo. La clave "anon" es pública por diseño:
+  // los datos los protegen las reglas (RLS) de supabase/setup.sql.
+  url: 'https://yrhyjyupzoqlszdmqtkh.supabase.co',
+  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaHlqeXVwem9xbHN6ZG1xdGtoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ4MTUzODksImV4cCI6MjExMDM5MTM4OX0.qmVa99a2RSDFuafDVouA9J0CMpnGzykpeEFSTSVsmwk',
 };
 
 const KEY_DIRTY = 'hoquei.cloud.dirty';       // ids de partidos pendientes de subir

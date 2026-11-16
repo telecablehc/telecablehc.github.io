@@ -267,8 +267,8 @@ function finish() {
   render();
   updateWakeLock();
   showRecord(record);
-  // al cerrar el resumen, se prepara el siguiente partido
-  $('dlgResults').addEventListener('close', () => { if (!S.squadOk) openSquad(); }, { once: true });
+  // al cerrar el resumen se vuelve al menú de la sección
+  $('dlgResults').addEventListener('close', () => go(sectionOf(record.mode)), { once: true });
 }
 
 function undo() {
@@ -280,12 +280,18 @@ function undo() {
   toast('Deshecho');
 }
 
-function setMode(mode) {
-  if (S.mode === mode || gameTotal() > 0 || S.events.length) return;
-  S = newSession(mode, S);
-  save();
-  render();
-  if (!S.squadOk) openSquad();
+const isStarted = (X = S) => sum(X.partMs) > 0 || X.running || X.events.length > 0;
+
+// Empieza (o continúa) un partido o un entreno y abre la pantalla de juego
+function startSession(mode) {
+  if (S.mode !== mode) {
+    if (isStarted()) return; // hay otra sesión en curso: el menú no lo permite
+    S = newSession(mode, S);
+    undoStack = [];
+    save();
+  }
+  go('juego');
+  if (!S.squadOk && !isStarted()) openSquad();
 }
 
 // ---------- Sanciones (superioridad / inferioridad) ----------
@@ -562,11 +568,10 @@ function card(p) {
 }
 
 function render() {
-  const started = gameTotal() > 0 || S.events.length > 0;
-  document.querySelectorAll('#modeSeg button').forEach((b) => {
-    b.classList.toggle('active', b.dataset.mode === S.mode);
-    b.disabled = started && b.dataset.mode !== S.mode;
-  });
+  renderHeader();
+  if (route === 'inicio') renderHome();
+  if (route === 'partidos' || route === 'entrenos') renderMenu();
+  if (route === 'totales') renderTotals();
 
   $('btnPlay').textContent = S.running ? '❚❚' : '▶';
   $('btnPlay').classList.toggle('running', S.running);
@@ -611,7 +616,6 @@ function render() {
   if (currentTab === 'eventos') renderEvents();
   if (currentTab === 'resumen') renderSummary();
   if (currentTab === 'datos') renderDatos();
-  if (currentTab === 'totales') renderTotals();
   tick();
 }
 
@@ -785,6 +789,11 @@ function fmtLong(ms) {
 
 // Actualiza solo los textos de tiempo (varias veces por segundo)
 function tick() {
+  if (route === 'inicio') renderHome();
+  if ((route === 'partidos' || route === 'entrenos') && isStarted() && S.mode === modeOf(route)) {
+    const sub = document.querySelector('#menuMain .menu-btn-sub');
+    if (sub) sub.textContent = sessionStatus();
+  }
   const part = partNow();
   $('clock').textContent = fmt(part);
 
@@ -831,7 +840,115 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-// ---------- Pestañas ----------
+// ---------- Pantallas (índice → sección → juego) ----------
+// La pantalla va en la dirección (#partidos, #juego…), así el botón
+// «atrás» del móvil funciona.
+
+const ROUTES = ['inicio', 'partidos', 'entrenos', 'juego', 'totales'];
+let route = 'inicio';
+const routeStack = [];
+const sectionOf = (mode) => (mode === 'entreno' ? 'entrenos' : 'partidos');
+const modeOf = (section) => (section === 'entrenos' ? 'entreno' : 'partido');
+
+function parentRoute(r) {
+  if (r === 'juego') return sectionOf(S.mode);
+  if (r === 'totales') return 'partidos';
+  return 'inicio';
+}
+
+function go(r) {
+  if (location.hash === '#' + r) applyRoute();
+  else location.hash = r;
+}
+
+function goBack() {
+  // si venimos de la pantalla anterior dentro de la app, se usa el historial del navegador
+  if (routeStack.length > 1 && routeStack[routeStack.length - 2] === parentRoute(route)) history.back();
+  else location.replace('#' + parentRoute(route));
+}
+
+function applyRoute() {
+  const h = location.hash.slice(1);
+  route = ROUTES.includes(h) ? h : 'inicio';
+  if (routeStack[routeStack.length - 2] === route) routeStack.pop();
+  else if (routeStack[routeStack.length - 1] !== route) routeStack.push(route);
+
+  const screen = route === 'partidos' || route === 'entrenos' ? 'menu' : route;
+  document.querySelectorAll('.screen').forEach((s) => (s.hidden = s.id !== `screen-${screen}`));
+  document.body.classList.toggle('in-game', route === 'juego');
+  document.querySelectorAll('dialog[open]').forEach((d) => d.id !== 'dlgResults' && d.close());
+  window.scrollTo(0, 0);
+  render();
+  startupChecks();
+}
+
+function renderHeader() {
+  const titles = {
+    inicio: S.info.team || 'Telecable HC',
+    partidos: 'Partidos',
+    entrenos: 'Entrenos',
+    totales: 'Totales',
+    juego: S.mode === 'partido' ? `Partido${S.info.rival ? ' vs ' + S.info.rival : ''}` : 'Entreno',
+  };
+  $('screenTitle').textContent = titles[route];
+  $('btnBack').hidden = route === 'inicio';
+  $('btnUndo').hidden = route !== 'juego';
+}
+
+// Texto corto del estado de la sesión en curso ("2-1 · 2ª parte 12:30 · en juego")
+function sessionStatus() {
+  const [us, them] = score(S);
+  const parts = [];
+  if (S.mode === 'partido') parts.push(`${S.info.rival ? 'vs ' + S.info.rival + ' · ' : ''}${us}-${them}`);
+  parts.push(`${partName(S, S.part)} ${fmt(partNow())}`);
+  parts.push(S.running ? 'en juego' : 'en pausa');
+  return parts.join(' · ');
+}
+
+function renderHome() {
+  const started = isStarted();
+  $('homeSubPartidos').textContent = started && S.mode === 'partido' ? `En curso: ${sessionStatus()}` : '';
+  $('homeSubEntrenos').textContent = started && S.mode === 'entreno' ? `En curso: ${sessionStatus()}` : '';
+}
+
+function renderMenu() {
+  const mode = modeOf(route);
+  const word = mode === 'partido' ? 'partido' : 'entreno';
+  const other = mode === 'partido' ? 'entreno' : 'partido';
+  const started = isStarted();
+  const box = $('menuMain');
+  box.replaceChildren();
+
+  const btn = document.createElement('button');
+  btn.className = 'menu-btn primary-card';
+  const title = document.createElement('span');
+  title.className = 'menu-btn-title';
+  const sub = document.createElement('span');
+  sub.className = 'menu-btn-sub';
+  btn.append(title, sub);
+
+  if (started && S.mode === mode) {
+    title.textContent = `Continuar ${word}`;
+    sub.textContent = sessionStatus();
+    btn.onclick = () => go('juego');
+  } else if (started && S.mode !== mode) {
+    title.textContent = `Hay un ${other} en curso`;
+    sub.textContent = `Termínalo antes de empezar un ${word}. Toca para ir al ${other}.`;
+    btn.classList.add('busy');
+    btn.onclick = () => go('juego');
+  } else {
+    title.textContent = `Nuevo ${word}`;
+    sub.textContent = mode === 'partido' ? 'Elegir convocadas y empezar' : 'Empezar a contar minutos';
+    btn.onclick = () => startSession(mode);
+  }
+  box.append(btn);
+
+  $('menuTotals').hidden = mode !== 'partido';
+  $('menuHistTitle').textContent = mode === 'partido' ? 'Partidos jugados' : 'Entrenos';
+  renderHistory(mode, $('menuHist'));
+}
+
+// ---------- Pestañas de la pantalla de juego ----------
 
 function showTab(name) {
   currentTab = name;
@@ -1064,11 +1181,11 @@ function recordTitle(rec) {
   return rec.mode === 'partido' ? `${rec.info.team || 'Nosotras'} x ${rec.info.rival || 'Rival'}` : 'Entreno';
 }
 
-function showHistory() {
-  const history = load(KEY_HISTORY, []);
-  const list = $('histList');
+// Lista de partidos o entrenos terminados (en el menú de cada sección)
+function renderHistory(mode, list) {
+  const history = load(KEY_HISTORY, []).filter((r) => r.mode === mode);
   if (!history.length) {
-    list.innerHTML = '<p class="hint">Todavía no hay sesiones guardadas.</p>';
+    list.innerHTML = `<p class="hint">Todavía no hay ${mode === 'partido' ? 'partidos' : 'entrenos'} terminados.</p>`;
   } else {
     list.replaceChildren(...history.map((rec) => {
       const row = document.createElement('div');
@@ -1080,7 +1197,7 @@ function showHistory() {
       open.innerHTML = '<b></b><small></small>';
       open.querySelector('b').textContent = `${recordTitle(rec)}  ${score(rec).join('-')}`;
       open.querySelector('small').textContent = `${fecha} · ${rec.info.competicion || ''} · ${fmt(sum(rec.partMs))}`;
-      open.onclick = () => { $('dlgHistory').close(); showRecord(rec); };
+      open.onclick = () => showRecord(rec);
       const del = document.createElement('button');
       del.type = 'button';
       del.className = 'ghost danger small';
@@ -1089,17 +1206,19 @@ function showHistory() {
         if (!confirm('¿Borrar esta sesión del historial?')) return;
         store(KEY_HISTORY, load(KEY_HISTORY, []).filter((x) => x.id !== rec.id));
         cloudMarkDeleted(rec.id);
-        showHistory();
+        render();
       };
       row.append(open, del);
       return row;
     }));
   }
+}
+
+function renderLastBackup() {
   const last = load(KEY_BACKUP, null);
   $('lastBackup').textContent = last
     ? `Última copia: ${new Date(last).toLocaleDateString('es-ES')}.`
     : 'Todavía no se ha hecho ninguna copia.';
-  if (!$('dlgHistory').open) $('dlgHistory').showModal();
 }
 
 // ---------- Copia de seguridad ----------
@@ -1132,7 +1251,7 @@ async function exportBackup() {
     downloadFile(file);
   }
   store(KEY_BACKUP, Date.now());
-  showHistory();
+  renderLastBackup();
   toast(`Copia exportada (${data.history.length} sesiones)`);
 }
 
@@ -1181,7 +1300,7 @@ async function importBackup(file) {
   }
 
   render();
-  showHistory();
+  renderLastBackup();
   const skipped = data.history.length - nuevos.length;
   alert(`Copia importada: ${nuevos.length} sesiones añadidas` +
     (skipped ? `, ${skipped} ya estaban` : '') +
@@ -1211,6 +1330,7 @@ async function checkOffline() {
 function openSettings() {
   checkOffline();
   updateCloudUI();
+  renderLastBackup();
   $('partLen').value = S.partLen;
   $('partsNum').value = S.parts;
   $('dlgSettings').showModal();
@@ -1248,7 +1368,10 @@ $('btnUndo').onclick = undo;
 $('btnNextPart').onclick = nextPart;
 $('btnFinish').onclick = finish;
 $('btnSettings').onclick = openSettings;
-$('btnHistory').onclick = showHistory;
+$('btnBack').onclick = goBack;
+$('menuTotals').onclick = () => go('totales');
+document.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => go(b.dataset.go)));
+window.addEventListener('hashchange', applyRoute);
 $('btnSquad').onclick = openSquad;
 $('btnExport').onclick = exportBackup;
 $('btnImport').onclick = () => $('importFile').click();
@@ -1263,7 +1386,6 @@ $('btnCsv').onclick = () => { commit(); save(); exportCsv(S); };
 $('resPrint').onclick = () => currentRecord && printSummary(currentRecord);
 $('resCsv').onclick = () => currentRecord && exportCsv(currentRecord);
 
-document.querySelectorAll('#modeSeg button').forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
 document.querySelectorAll('[data-poss]').forEach((b) => (b.onclick = () => setPossession(b.dataset.poss)));
 document.querySelectorAll('[data-act]').forEach((b) => (b.onclick = () => ACTIONS[b.dataset.act]()));
 document.querySelectorAll('.tabs button').forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
@@ -1278,22 +1400,22 @@ document.querySelectorAll('[data-info]').forEach((el) => {
 
 // Teclado (Windows): espacio = reloj
 document.addEventListener('keydown', (ev) => {
-  if (ev.code === 'Space' && !/INPUT|TEXTAREA/.test(ev.target.tagName) && !document.querySelector('dialog[open]')) {
+  if (route === 'juego' && ev.code === 'Space' && !/INPUT|TEXTAREA/.test(ev.target.tagName) && !document.querySelector('dialog[open]')) {
     ev.preventDefault();
     togglePlay();
   }
 });
 
-setInterval(tick, 250);
-render();
-updateWakeLock();
-// Al empezar un partido nuevo, lo primero es elegir las convocadas
+// En la pantalla de juego, un partido nuevo empieza eligiendo las convocadas
 function startupChecks() {
-  if (cloudLocked()) return;
-  if (!S.squadOk && gameTotal() === 0 && !S.events.length && !$('dlgSquad').open) openSquad();
+  if (cloudLocked() || route !== 'juego') return;
+  if (!S.squadOk && !isStarted() && !$('dlgSquad').open) openSquad();
 }
+
+setInterval(tick, 250);
 cloudInit();      // cuenta y sincronización (cloud.js)
-startupChecks();
+applyRoute();     // muestra la pantalla de la dirección (por defecto, el índice)
+updateWakeLock();
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js');

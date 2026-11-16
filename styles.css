@@ -148,6 +148,44 @@ input, textarea { font: inherit; user-select: text; -webkit-user-select: text; }
 .pick-btn:disabled { opacity: .35; }
 #calledList { margin: 4px 4px 10px; }
 
+/* Cabecera y pantallas */
+.screen-title {
+  margin: 0; font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+#btnBack { font-size: 30px; line-height: 1; padding-bottom: 4px; }
+body:not(.in-game) { padding-bottom: calc(env(safe-area-inset-bottom) + 24px); }
+
+/* Inicio (índice) */
+.home {
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  max-width: 520px; margin: 4vh auto 0;
+}
+.home-logo { height: min(28vh, 200px); margin-bottom: 8px; }
+.home-btn {
+  width: 100%; min-height: 110px; border-radius: 18px; border: 0;
+  background: var(--brand); color: #fff; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 6px; padding: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+.home-btn + .home-btn { background: var(--panel); color: var(--text); border: 2px solid var(--brand); }
+.home-btn-title { font-size: 30px; font-weight: 800; }
+.home-btn-sub { font-size: 14px; opacity: .85; min-height: 1em; }
+.home-btn:active, .menu-btn:active { transform: scale(.98); }
+
+/* Menú de sección */
+#screen-menu { max-width: 720px; margin: 0 auto; }
+.menu-btn {
+  width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-top: 12px;
+}
+.menu-btn-title { font-size: 20px; font-weight: 700; }
+.menu-btn-sub { font-size: 14px; color: var(--muted); }
+.menu-btn.primary-card { background: var(--on); border-color: var(--on); color: #fff; min-height: 90px; justify-content: center; }
+.menu-btn.primary-card .menu-btn-sub { color: #fff; opacity: .9; }
+.menu-btn.primary-card.busy { background: var(--amber); border-color: var(--amber); color: #1a1a1a; }
+.menu-btn.primary-card.busy .menu-btn-sub { color: #1a1a1a; }
+#menuHist .hist-item { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; }
+
 /* Botones de acción */
 .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
 @media (min-width: 1000px) { .actions { grid-template-columns: repeat(6, 1fr); } }

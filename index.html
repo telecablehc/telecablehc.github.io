@@ -14,21 +14,52 @@
 </head>
 <body>
   <div id="app">
+    <!-- Cabecera común a todas las pantallas -->
     <header class="top">
+      <button class="icon-btn" id="btnBack" title="Volver" hidden>‹</button>
       <span class="logo-wrap">
         <img class="logo" src="crest.png" alt="Telecable HC">
         <span id="cloudDot" class="cloud-dot" title="Sincronización" hidden></span>
       </span>
-      <div class="seg" id="modeSeg">
-        <button data-mode="partido">Partido</button>
-        <button data-mode="entreno">Entreno</button>
-      </div>
+      <h1 id="screenTitle" class="screen-title">Telecable HC</h1>
       <div class="spacer"></div>
       <button class="icon-btn" id="btnUndo" title="Deshacer">↶</button>
-      <button class="icon-btn" id="btnHistory" title="Historial">☰</button>
       <button class="icon-btn" id="btnSettings" title="Ajustes">⚙</button>
     </header>
 
+    <!-- ===== Inicio: índice ===== -->
+    <section id="screen-inicio" class="screen">
+      <div class="home">
+        <img src="crest.png" alt="" class="home-logo">
+        <button class="home-btn" data-go="partidos">
+          <span class="home-btn-title">Partidos</span>
+          <span class="home-btn-sub" id="homeSubPartidos"></span>
+        </button>
+        <button class="home-btn" data-go="entrenos">
+          <span class="home-btn-title">Entrenos</span>
+          <span class="home-btn-sub" id="homeSubEntrenos"></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ===== Partidos / Entrenos: menú de la sección ===== -->
+    <section id="screen-menu" class="screen" hidden>
+      <div id="menuMain"></div>
+      <button id="menuTotals" class="menu-btn">
+        <span class="menu-btn-title">Totales</span>
+        <span class="menu-btn-sub">Suma de todos los partidos: equipo y jugadoras</span>
+      </button>
+      <h2 id="menuHistTitle">Historial</h2>
+      <div id="menuHist"></div>
+    </section>
+
+    <!-- ===== Totales ===== -->
+    <section id="screen-totales" class="screen" hidden>
+      <div id="totals"></div>
+    </section>
+
+    <!-- ===== Juego: partido o entreno en curso ===== -->
+    <section id="screen-juego" class="screen" hidden>
     <!-- Panel fijo: reloj, marcador, posesión -->
     <section class="clock">
       <div class="clock-info">
@@ -109,12 +140,6 @@
         <h2>Observaciones</h2>
         <textarea data-info="notas" rows="6" placeholder="Notas del partido…"></textarea>
       </section>
-
-      <!-- Totales por jugadora -->
-      <section id="tab-totales" class="tab" hidden>
-        <h2>Totales de todos los partidos</h2>
-        <div id="totals"></div>
-      </section>
     </main>
 
     <nav class="tabs">
@@ -122,8 +147,8 @@
       <button data-tab="eventos">Eventos</button>
       <button data-tab="resumen">Resumen</button>
       <button data-tab="datos">Datos</button>
-      <button data-tab="totales">Totales</button>
     </nav>
+    </section>
   </div>
 
   <!-- Diálogo genérico para registrar acciones -->
@@ -165,6 +190,15 @@
       </div>
       <h4>Sin conexión</h4>
       <p id="offlineStatus" class="hint"></p>
+      <div class="backup">
+        <h4>Copia de seguridad</h4>
+        <p class="hint">Guarda un archivo con todo el historial (y el partido en curso) para no perderlo si se estropea o cambia el dispositivo. <span id="lastBackup"></span></p>
+        <div class="row">
+          <button type="button" id="btnExport" class="ghost">Exportar copia</button>
+          <button type="button" id="btnImport" class="ghost">Importar copia</button>
+          <input type="file" id="importFile" accept=".json,application/json" hidden>
+        </div>
+      </div>
       <div class="dlg-actions">
         <button type="button" id="btnReset" class="ghost danger">Reiniciar sesión</button>
         <button value="ok" class="primary">Cerrar</button>
@@ -178,27 +212,6 @@
       <div class="dlg-actions">
         <button type="button" id="resPrint" class="ghost">Imprimir / PDF</button>
         <button type="button" id="resCsv" class="ghost">CSV minutos</button>
-        <button value="ok" class="primary">Cerrar</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="dlgHistory">
-    <form method="dialog">
-      <h3>Historial</h3>
-      <div id="histList"></div>
-
-      <div class="backup">
-        <h4>Copia de seguridad</h4>
-        <p class="hint">Guarda un archivo con todo el historial (y el partido en curso) para no perderlo si se estropea o cambia el dispositivo. <span id="lastBackup"></span></p>
-        <div class="row">
-          <button type="button" id="btnExport" class="primary">Exportar copia</button>
-          <button type="button" id="btnImport" class="ghost">Importar copia</button>
-          <input type="file" id="importFile" accept=".json,application/json" hidden>
-        </div>
-      </div>
-      <div class="dlg-actions">
-        <span></span>
         <button value="ok" class="primary">Cerrar</button>
       </div>
     </form>

@@ -346,7 +346,7 @@ function fixtureWhen(f) {
   const d = new Date(f.fecha + 'T12:00:00');
   return `${DIAS[d.getDay()]} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}${f.hora ? ' · ' + f.hora : ''}`;
 }
-const fixtureTitle = (f) => `${f.local ? 'vs' : 'en'} ${f.rival}`;
+const fixtureTitle = (f) => f.rival; // casa/fuera se indica con 🏠/✈️
 const venueIcon = (f) => (f.local ? '🏠' : '✈️'); // en casa / fuera
 
 // ¿Esta jornada es el partido en curso? (nuevo o reabierto para corregir)
@@ -980,7 +980,7 @@ function renderHeader() {
 function sessionStatus() {
   const [us, them] = score(S);
   const parts = [];
-  if (S.mode === 'partido') parts.push(`${S.info.rival ? 'vs ' + S.info.rival + ' · ' : ''}${us}-${them}`);
+  if (S.mode === 'partido') parts.push(`${S.info.rival ? S.info.rival + ' · ' : ''}${us}-${them}`);
   parts.push(`${partName(S, S.part)} ${fmt(partNow())}`);
   parts.push(S.running ? 'en juego' : 'en pausa');
   return parts.join(' · ');

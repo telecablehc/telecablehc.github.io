@@ -5,6 +5,7 @@
 !app.js
 !cloud.js
 !calendar.js
+!entrenos.js
 !supabase.min.js
 !styles.css
 !sw.js

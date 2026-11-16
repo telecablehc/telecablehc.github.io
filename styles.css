@@ -389,3 +389,78 @@ td.empty { color: var(--muted); text-align: center; }
   display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; text-align: left; }
 .add-past { width: 100%; margin-top: 12px; padding: 12px; font-weight: 600; }
 #dlgEditRec textarea { width: 100%; }
+
+/* ===== Planificación de entrenos ===== */
+.form label.wide { grid-column: 1 / -1; }
+.chips-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.chip-btn {
+  border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 7px 12px; font-size: 14px;
+}
+.chip-btn.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+.check { display: flex; gap: 8px; align-items: center; margin: 12px 0 0; font-size: 15px; }
+.check input { width: 20px; height: 20px; }
+.plan-actions { margin-top: 16px; }
+.plan-actions .primary { flex: 1 1 200px; padding: 14px; font-size: 17px; }
+.small-btn { padding: 8px 14px; margin-top: 8px; }
+
+/* Etiqueta del tipo de ejercicio */
+.tipo { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; color: #fff; background: var(--muted); white-space: nowrap; }
+.t-calentamiento { --tc: #e07b00; }
+.t-tecnica { --tc: #2f6fdb; }
+.t-tactica { --tc: #7b3fe4; }
+.t-fisico { --tc: #d64545; }
+.t-porteras { --tc: #b8860b; }
+.t-juego { --tc: #1f9d55; }
+.t-calma { --tc: #5f7d8c; }
+.tipo[class*="t-"] { background: var(--tc); }
+.chip-btn[class*="t-"].active { background: var(--tc); border-color: var(--tc); }
+
+/* Tarjeta de ejercicio */
+.ex-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+.ex-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ex-n { width: 26px; height: 26px; border-radius: 50%; background: var(--brand); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; }
+.ex-name { flex: 1 1 140px; min-width: 0; }
+.ex-dur { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ex-body { display: flex; gap: 12px; align-items: flex-start; margin-top: 8px; flex-wrap: wrap; }
+.ex-body .draw-thumb { flex: 0 0 min(260px, 100%); }
+.ex-desc { flex: 1 1 200px; margin: 0; white-space: pre-wrap; font-size: 14px; color: var(--text); }
+.ex-desc:empty { display: none; }
+.ex-tools { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.ex-tools button:disabled { opacity: .3; }
+.draw-thumb { border-radius: 8px; overflow: hidden; }
+.draw-thumb svg { width: 100%; height: auto; display: block; }
+
+/* Pista (dibujo) */
+.rk-floor { fill: #dcebf5; stroke: #3a4a58; stroke-width: 0.18; }
+.rk-line { stroke: #2c5b8a; stroke-width: 0.1; }
+.rk-dot { fill: #2c5b8a; }
+.rk-goal { fill: #fff; stroke: #111; stroke-width: 0.12; }
+
+/* Editor de dibujo */
+dialog.draw-dialog { width: min(1100px, calc(100vw - 12px)); max-height: 96vh; padding: 10px; }
+.draw-tools { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.tool {
+  display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 62px; padding: 6px 4px;
+  border: 1px solid var(--line); background: var(--bg); border-radius: 10px; font-size: 11px;
+}
+.tool-icon { font-size: 18px; line-height: 1.1; font-weight: 700; }
+.tool.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+.tool-own .tool-icon { color: #d0102a; }
+.tool-opp .tool-icon { color: #1f4fa8; }
+.tool-gk .tool-icon { color: #b8860b; }
+.tool-ball .tool-icon { color: #ff7a00; font-size: 26px; line-height: .8; }
+.tool-cone .tool-icon { color: #e0b800; }
+.tool.active .tool-icon { color: #fff; }
+.tool.danger { color: var(--warn); }
+.draw-stage svg { width: 100%; height: auto; display: block; touch-action: none; user-select: none; -webkit-user-select: none; }
+.draw-hint { margin: 6px 2px 0; }
+@media (max-width: 480px) {
+  .tool { min-width: 52px; }
+  .tool-label { font-size: 10px; }
+}
+
+@media print {
+  #printArea .ex-card { break-inside: avoid; border-color: #999; background: #fff; }
+  #printArea .draw-thumb { flex-basis: 300px; }
+  #printArea .tipo { color: #000; background: none; border: 1px solid #999; }
+}

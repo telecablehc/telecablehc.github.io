@@ -21,6 +21,11 @@ const KEY_DIRTY = 'hoquei.cloud.dirty';       // ids de partidos pendientes de s
 const KEY_DELETED = 'hoquei.cloud.deleted';   // ids borrados pendientes de subir
 const KEY_LASTPULL = 'hoquei.cloud.lastPull'; // última fecha de cambios bajados
 const KEY_ACCOUNT = 'hoquei.cloud.account';   // { id, email } del usuario de este dispositivo
+// Planes de entreno y biblioteca de ejercicios: tabla "documentos" (id = "tipo:id")
+const KEY_DOCS_DIRTY = 'hoquei.cloud.docsDirty';
+const KEY_DOCS_LASTPULL = 'hoquei.cloud.docsLastPull';
+const DOC_KEYS = { plan: 'hoquei.planes', ejercicio: 'hoquei.ejercicios' };
+let docsError = ''; // p. ej. si aún no se ha creado la tabla en Supabase
 
 let sb = null;
 let cloudUser = null;
@@ -48,6 +53,49 @@ function cloudMarkDeleted(id) {
   del.add(id);
   store(KEY_DELETED, [...del]);
   cloudMarkDirty(id);
+}
+
+function cloudMarkDoc(kind, id) {
+  if (!cloudEnabled()) return;
+  const d = new Set(load(KEY_DOCS_DIRTY, []));
+  d.add(`${kind}:${id}`);
+  store(KEY_DOCS_DIRTY, [...d]);
+  scheduleSync();
+}
+
+async function pushDocs() {
+  const dirty = load(KEY_DOCS_DIRTY, []);
+  if (!dirty.length) return;
+  const rows = dirty.map((key) => {
+    const [kind, id] = key.split(':');
+    const item = load(DOC_KEYS[kind], []).find((x) => x.id === id);
+    return item ? { id: key, tipo: kind, datos: item, borrado: false } : { id: key, tipo: kind, datos: {}, borrado: true };
+  });
+  const { error } = await sb.from('documentos').upsert(rows);
+  if (error) throw error;
+  const done = new Set(dirty);
+  store(KEY_DOCS_DIRTY, load(KEY_DOCS_DIRTY, []).filter((k) => !done.has(k)));
+}
+
+async function pullDocs() {
+  const since = load(KEY_DOCS_LASTPULL, null);
+  let q = sb.from('documentos').select('id, tipo, datos, borrado, actualizado').order('actualizado', { ascending: true });
+  if (since) q = q.gt('actualizado', since);
+  const { data, error } = await q;
+  if (error) throw error;
+  if (!data.length) return false;
+  const dirty = new Set(load(KEY_DOCS_DIRTY, []));
+  const lists = {};
+  Object.entries(DOC_KEYS).forEach(([kind, key]) => (lists[kind] = load(key, [])));
+  data.forEach((row) => {
+    if (dirty.has(row.id) || !lists[row.tipo]) return; // el cambio local, aún sin subir, manda
+    const id = row.id.slice(row.tipo.length + 1);
+    lists[row.tipo] = lists[row.tipo].filter((x) => x.id !== id);
+    if (!row.borrado && row.datos && row.datos.id) lists[row.tipo].push(row.datos);
+  });
+  Object.entries(DOC_KEYS).forEach(([kind, key]) => store(key, lists[kind]));
+  store(KEY_DOCS_LASTPULL, data[data.length - 1].actualizado);
+  return true;
 }
 
 // Llamada desde save(): sube el partido en curso unos segundos después del último cambio
@@ -138,8 +186,17 @@ async function cloudSync() {
       return;
     }
     await pushGames();
-    const changed = await pullGames();
+    let changed = await pullGames();
     if (sessionPending) await pushSession();
+    // Planes y biblioteca: si falla (p. ej. falta la tabla), los partidos siguen sincronizando
+    try {
+      await pushDocs();
+      changed = (await pullDocs()) || changed;
+      docsError = '';
+    } catch (err) {
+      if (isNetworkError(err)) throw err;
+      docsError = /documentos/.test(err.message || '') ? 'falta crear la tabla «documentos» en Supabase' : err.message;
+    }
     setStatus('ok');
     if (changed) render();
   } catch (err) {
@@ -160,7 +217,8 @@ function updateCloudUI() {
   const dot = $('cloudDot');
   const box = $('cloudBox');
   if (!cloudEnabled()) { dot.hidden = true; box.hidden = true; return; }
-  const pending = load(KEY_DIRTY, []).length + (sessionPending ? 1 : 0);
+  const pending = load(KEY_DIRTY, []).length + (sessionPending ? 1 : 0) +
+    (docsError ? 0 : load(KEY_DOCS_DIRTY, []).length);
   const st = cloudStatus.state;
   dot.hidden = false;
   dot.className = 'cloud-dot ' + (st === 'ok' && !pending ? 'ok' : st === 'error' ? 'bad' : st === 'offline' ? 'off' : 'wait');
@@ -173,7 +231,9 @@ function updateCloudUI() {
     error: `✗ Error al sincronizar: ${cloudStatus.msg}`,
     off: '',
   }[st];
-  $('cloudInfo').textContent = cloudUser ? `${cloudUser.email} · ${text}` : 'Sin sesión';
+  $('cloudInfo').textContent = cloudUser
+    ? `${cloudUser.email} · ${text}${docsError ? ` · Planes de entreno sin sincronizar: ${docsError}` : ''}`
+    : 'Sin sesión';
 }
 
 // ---------- Pantalla de acceso ----------
@@ -270,7 +330,9 @@ async function afterLogin(user) {
   if (!prev || prev.id !== user.id) {
     // Primera vez en este dispositivo: se suben los partidos que ya había guardados
     store(KEY_LASTPULL, null);
+    store(KEY_DOCS_LASTPULL, null);
     load(KEY_HISTORY, []).forEach((r) => cloudMarkDirty(r.id));
+    Object.entries(DOC_KEYS).forEach(([kind, key]) => load(key, []).forEach((x) => cloudMarkDoc(kind, x.id)));
   }
   cloudUser = { id: user.id, email: user.email };
   store(KEY_ACCOUNT, cloudUser);

@@ -53,9 +53,49 @@
         <h2 id="menuCalTitle">Calendario</h2>
         <div id="menuCal" class="fixtures"></div>
       </div>
+      <!-- Solo en Entrenos: planificación -->
+      <div id="menuPlanBox" hidden>
+        <button id="menuLibrary" class="menu-btn">
+          <span class="menu-btn-title">Biblioteca de ejercicios</span>
+          <span class="menu-btn-sub" id="menuLibrarySub">Ejercicios guardados para reutilizar</span>
+        </button>
+        <h2>Entrenos planificados</h2>
+        <button id="menuNewPlan" class="ghost add-past">＋ Planificar un entreno</button>
+        <div id="menuPlans" class="fixtures"></div>
+      </div>
       <h2 id="menuHistTitle">Historial</h2>
       <div id="menuHist"></div>
       <button id="menuOther" class="ghost">+ Otro partido (amistoso, copa…)</button>
+    </section>
+
+    <!-- ===== Plan de un entreno ===== -->
+    <section id="screen-plan" class="screen" hidden>
+      <div class="form">
+        <label>Fecha <input id="planFecha" type="date"></label>
+        <label>Hora <input id="planHora" type="time"></label>
+        <label class="wide">Objetivo <input id="planObjetivo" type="text" placeholder="Ej.: salida de presión, 2x1, finalización…"></label>
+      </div>
+      <h2>Ejercicios <span id="planTotal" class="count"></span></h2>
+      <div id="planExercises"></div>
+      <div class="row-btns">
+        <button id="planAddNew" class="ghost">＋ Nuevo ejercicio</button>
+        <button id="planAddLib" class="ghost">＋ Desde la biblioteca</button>
+      </div>
+      <h2>Notas</h2>
+      <textarea id="planNotas" rows="4" placeholder="Material, grupos, observaciones…"></textarea>
+      <div class="row-btns plan-actions">
+        <button id="planStart" class="primary">▶ Empezar entreno</button>
+        <button id="planPrint" class="ghost">Imprimir / PDF</button>
+        <button id="planDup" class="ghost">Duplicar</button>
+        <button id="planDelete" class="ghost danger">Borrar plan</button>
+      </div>
+    </section>
+
+    <!-- ===== Biblioteca de ejercicios ===== -->
+    <section id="screen-biblioteca" class="screen" hidden>
+      <div id="libFilter" class="chips-filter"></div>
+      <button id="libNew" class="ghost add-past">＋ Nuevo ejercicio</button>
+      <div id="libList"></div>
     </section>
 
     <!-- ===== Totales ===== -->
@@ -182,6 +222,48 @@
     </div>
   </dialog>
 
+  <!-- Ejercicio (de un plan o de la biblioteca) -->
+  <dialog id="dlgExercise">
+    <h3 id="exTitle">Ejercicio</h3>
+    <div class="form">
+      <label class="wide">Nombre <input id="exNombre" type="text" placeholder="Ej.: 3x2 con finalización"></label>
+      <label>Duración (min) <input id="exDur" type="number" min="1" max="180" inputmode="numeric"></label>
+    </div>
+    <div class="ask-label">Tipo</div>
+    <div id="exTipo" class="chips-filter"></div>
+    <div class="ask-label">Descripción</div>
+    <textarea id="exDesc" rows="4" placeholder="Organización, reglas, variantes, puntos clave…"></textarea>
+    <div class="ask-label">Dibujo</div>
+    <div id="exThumb" class="draw-thumb"></div>
+    <button type="button" id="exDraw" class="ghost">✏️ Dibujar en la pista</button>
+    <label class="check" id="exLibWrap"><input type="checkbox" id="exLib"> Guardar también en la biblioteca</label>
+    <div class="dlg-actions">
+      <button type="button" id="exCancel" class="ghost">Cancelar</button>
+      <button type="button" id="exOk" class="primary">Guardar</button>
+    </div>
+  </dialog>
+
+  <!-- Dibujo en la pista -->
+  <dialog id="dlgDraw" class="draw-dialog">
+    <div id="drawTools" class="draw-tools"></div>
+    <div class="draw-stage"><svg id="drawSvg" viewBox="-1 -1 42 22" xmlns="http://www.w3.org/2000/svg"></svg></div>
+    <p class="hint draw-hint" id="drawHint"></p>
+    <div class="dlg-actions">
+      <button type="button" id="drawCancel" class="ghost">Cancelar</button>
+      <button type="button" id="drawOk" class="primary">Hecho</button>
+    </div>
+  </dialog>
+
+  <!-- Elegir ejercicios de la biblioteca -->
+  <dialog id="dlgLibPick">
+    <h3>Añadir desde la biblioteca</h3>
+    <div id="libPickList"></div>
+    <div class="dlg-actions">
+      <span></span>
+      <button type="button" id="libPickClose" class="primary">Hecho</button>
+    </div>
+  </dialog>
+
   <!-- Editar los datos de un partido/entreno terminado -->
   <dialog id="dlgEditRec">
     <h3>Editar datos</h3>
@@ -276,6 +358,7 @@
   <script src="supabase.min.js"></script>
   <script src="cloud.js"></script>
   <script src="calendar.js"></script>
+  <script src="entrenos.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

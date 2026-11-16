@@ -302,13 +302,17 @@ const isStarted = (X = S) => sum(X.partMs) > 0 || X.running || X.events.length >
 
 // Empieza (o continúa) un partido o un entreno y abre la pantalla de juego.
 // fixture: jornada del calendario; rellena rival, fecha, hora, jornada…
-function startSession(mode, fixture = null) {
-  const fixtureId = fixture ? fixture.id : null;
-  const sameGame = S.mode === mode && (S.info.fixtureId || null) === fixtureId;
+// plan: plan de entreno (entrenos.js); el entreno queda unido a él.
+function startSession(mode, fixture = null, plan = null) {
+  const key = (fixture && fixture.id) || (plan && plan.id) || null;
+  const sameGame = S.mode === mode && (S.info.fixtureId || S.info.planId || null) === key;
   if (isStarted() && !sameGame) return; // hay otra sesión en curso: el menú no lo permite
   if (!sameGame) {
     S = newSession(mode, S);
     undoStack = [];
+    if (plan) {
+      Object.assign(S.info, { planId: plan.id, objetivo: plan.objetivo || '', fecha: plan.fecha || today(), hora: plan.hora || '' });
+    }
     if (fixture) {
       Object.assign(S.info, {
         fixtureId: fixture.id,
@@ -652,6 +656,8 @@ function render() {
   if (route === 'inicio') renderHome();
   if (route === 'partidos' || route === 'entrenos') renderMenu();
   if (route === 'totales') renderTotals();
+  if (route === 'plan') renderPlan();
+  if (route === 'biblioteca') renderLibrary();
 
   $('btnPlay').textContent = S.running ? '❚❚' : '▶';
   $('btnPlay').classList.toggle('running', S.running);
@@ -925,7 +931,7 @@ function toast(msg) {
 // La pantalla va en la dirección (#partidos, #juego…), así el botón
 // «atrás» del móvil funciona.
 
-const ROUTES = ['inicio', 'partidos', 'entrenos', 'juego', 'totales'];
+const ROUTES = ['inicio', 'partidos', 'entrenos', 'juego', 'totales', 'plan', 'biblioteca'];
 let route = 'inicio';
 const routeStack = [];
 const sectionOf = (mode) => (mode === 'entreno' ? 'entrenos' : 'partidos');
@@ -934,6 +940,7 @@ const modeOf = (section) => (section === 'entrenos' ? 'entreno' : 'partido');
 function parentRoute(r) {
   if (r === 'juego') return sectionOf(S.mode);
   if (r === 'totales') return 'partidos';
+  if (r === 'plan' || r === 'biblioteca') return 'entrenos';
   return 'inicio';
 }
 
@@ -949,10 +956,13 @@ function goBack() {
 }
 
 function applyRoute() {
-  const h = location.hash.slice(1);
+  // dirección: "#partidos", "#juego", "#plan/<id>"…
+  const [h, arg] = location.hash.slice(1).split('/');
   route = ROUTES.includes(h) ? h : 'inicio';
-  if (routeStack[routeStack.length - 2] === route) routeStack.pop();
-  else if (routeStack[routeStack.length - 1] !== route) routeStack.push(route);
+  if (route === 'plan') currentPlanId = arg || null;
+  const full = route + (route === 'plan' ? '/' + currentPlanId : '');
+  if (routeStack[routeStack.length - 2] === full) routeStack.pop();
+  else if (routeStack[routeStack.length - 1] !== full) routeStack.push(full);
 
   const screen = route === 'partidos' || route === 'entrenos' ? 'menu' : route;
   document.querySelectorAll('.screen').forEach((s) => (s.hidden = s.id !== `screen-${screen}`));
@@ -969,7 +979,9 @@ function renderHeader() {
     partidos: 'Partidos',
     entrenos: 'Entrenos',
     totales: 'Totales',
-    juego: S.mode === 'partido' ? `Partido${S.info.rival ? ' vs ' + S.info.rival : ''}` : 'Entreno',
+    plan: 'Plan de entreno',
+    biblioteca: 'Biblioteca de ejercicios',
+    juego: S.mode === 'partido' ? `Partido${S.info.rival ? ' vs ' + S.info.rival : ''}` : `Entreno${S.info.objetivo ? ' · ' + S.info.objetivo : ''}`,
   };
   $('screenTitle').textContent = titles[route];
   $('btnBack').hidden = route === 'inicio';
@@ -1020,6 +1032,8 @@ function renderMenu() {
 
   const history = load(KEY_HISTORY, []);
   const next = mode === 'partido' ? nextFixture(history) : null;
+  // entreno planificado para hoy y aún sin hacer
+  const todayPlan = mode === 'entreno' ? loadPlans().find((p) => p.fecha === today() && !planDone(p)) : null;
   if (started && S.mode === mode) {
     title.textContent = `Continuar ${word}`;
     sub.textContent = sessionStatus();
@@ -1033,9 +1047,13 @@ function renderMenu() {
     title.textContent = `Próximo partido · J${next.jornada}`;
     sub.textContent = `${fixtureWhen(next)} · ${venueIcon(next)} ${fixtureTitle(next)}`;
     btn.onclick = () => openFixture(next);
+  } else if (todayPlan) {
+    title.textContent = 'Entreno de hoy';
+    sub.textContent = `${todayPlan.objetivo || 'Sin objetivo'} · ${todayPlan.ejercicios.length} ejercicios · ${planDuration(todayPlan)} min`;
+    btn.onclick = () => go('plan/' + todayPlan.id);
   } else {
-    title.textContent = `Nuevo ${word}`;
-    sub.textContent = mode === 'partido' ? 'Elegir convocadas y empezar' : 'Empezar a contar minutos';
+    title.textContent = mode === 'partido' ? 'Nuevo partido' : 'Entreno sin plan';
+    sub.textContent = mode === 'partido' ? 'Elegir convocadas y empezar' : 'Solo contar minutos de las jugadoras';
     btn.onclick = () => startSession(mode);
   }
   box.append(btn);
@@ -1044,6 +1062,8 @@ function renderMenu() {
   $('menuTotals').hidden = !isMatch;
   $('menuCalBox').hidden = !isMatch;
   $('menuOther').hidden = !isMatch;
+  $('menuPlanBox').hidden = isMatch;
+  if (!isMatch) renderEntrenosMenu();
   if (isMatch) {
     $('menuCalTitle').textContent = `Calendario · ${COMPETICION} ${TEMPORADA}`;
     renderCalendar(history);
@@ -1052,7 +1072,7 @@ function renderMenu() {
     $('menuHistTitle').textContent = 'Otros partidos (amistosos, copa…)';
     renderHistory(mode, $('menuHist'), (r) => !linked.has(r.id));
   } else {
-    $('menuHistTitle').textContent = 'Entrenos';
+    $('menuHistTitle').textContent = 'Entrenos realizados';
     renderHistory(mode, $('menuHist'));
   }
 }
@@ -1273,6 +1293,10 @@ function summaryHtml(X) {
   h += '<h4>Inferioridad (under play)</h4>';
   h += table(['Tiempo', 'Res. inicial', 'Jugadoras en pista', 'Res. final', 'Goles', 'Sancionada'], sanc.filter((s) => s.side === 'nuestra').map(ppRow), 'Sin inferioridades');
 
+  // Plan del entreno (si se empezó desde un plan)
+  const plan = X.mode === 'entreno' && X.info.planId ? findPlan(X.info.planId) : null;
+  if (plan) h += `<h4>Plan del entreno</h4>${planHtml(plan, false)}`;
+
   // Observaciones
   h += `<h4>Observaciones</h4><p class="notes">${e(X.info.notas) || '—'}</p>`;
   return `<div class="sum">${h}</div>`;
@@ -1298,7 +1322,11 @@ function exportCsv(X) {
 }
 
 function printSummary(X) {
-  $('printArea').innerHTML = summaryHtml(X);
+  printHtml(summaryHtml(X));
+}
+
+function printHtml(html) {
+  $('printArea').innerHTML = html;
   document.body.classList.add('print-mode');
   const cleanup = () => document.body.classList.remove('print-mode');
   window.addEventListener('afterprint', cleanup, { once: true });
@@ -1540,6 +1568,8 @@ async function exportBackup() {
     exportedAt: new Date().toISOString(),
     history: load(KEY_HISTORY, []),
     session: S,
+    planes: loadPlans(),
+    ejercicios: loadExercises(),
   };
   const name = `telecable-copia-${today()}.json`;
   const file = new File([JSON.stringify(data)], name, { type: 'application/json' });
@@ -1592,6 +1622,17 @@ async function importBackup(file) {
     nuevos.forEach((r) => cloudMarkDirty(r.id));
   }
 
+  // Planes de entreno y biblioteca: se añaden los que no estén
+  const mergeDocs = (key, kind, items) => {
+    const list = load(key, []);
+    const have = new Set(list.map((x) => x.id));
+    const add = (items || []).filter((x) => x && x.id && !have.has(x.id));
+    if (add.length) { store(key, [...list, ...add]); add.forEach((x) => cloudMarkDoc(kind, x.id)); }
+    return add.length;
+  };
+  const nPlans = mergeDocs(KEY_PLANS, 'plan', data.planes);
+  const nEx = mergeDocs(KEY_EXERCISES, 'ejercicio', data.ejercicios);
+
   // Partido en curso: solo si en este dispositivo no hay nada empezado
   let session = false;
   const backupSession = data.session;
@@ -1610,6 +1651,7 @@ async function importBackup(file) {
   const skipped = data.history.length - nuevos.length;
   alert(`Copia importada: ${nuevos.length} sesiones añadidas` +
     (skipped ? `, ${skipped} ya estaban` : '') +
+    (nPlans || nEx ? `, ${nPlans} planes de entreno y ${nEx} ejercicios` : '') +
     (session ? ' y partido en curso recuperado.' : '.'));
 }
 
@@ -1744,6 +1786,7 @@ function startupChecks() {
 }
 
 setInterval(tick, 250);
+initEntrenos();   // planes de entreno y biblioteca (entrenos.js)
 cloudInit();      // cuenta y sincronización (cloud.js)
 applyRoute();     // muestra la pantalla de la dirección (por defecto, el índice)
 updateWakeLock();

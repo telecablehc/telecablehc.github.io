@@ -331,6 +331,7 @@ function fixtureWhen(f) {
   return `${DIAS[d.getDay()]} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}${f.hora ? ' · ' + f.hora : ''}`;
 }
 const fixtureTitle = (f) => `${f.local ? 'vs' : 'en'} ${f.rival}`;
+const venueIcon = (f) => (f.local ? '🏠' : '✈️'); // en casa / fuera
 
 function openFixture(f) {
   const history = load(KEY_HISTORY, []);
@@ -968,7 +969,7 @@ function renderHome() {
   }
   $('homeSubPartidos').textContent = started && S.mode === 'partido'
     ? `En curso: ${sessionStatus()}`
-    : next ? `Próximo: J${next.jornada} · ${fixtureWhen(next)} · ${fixtureTitle(next)}` : '';
+    : next ? `Próximo: J${next.jornada} · ${fixtureWhen(next)} · ${venueIcon(next)} ${fixtureTitle(next)}` : '';
   $('homeSubEntrenos').textContent = started && S.mode === 'entreno' ? `En curso: ${sessionStatus()}` : '';
 }
 
@@ -1001,7 +1002,7 @@ function renderMenu() {
     btn.onclick = () => go('juego');
   } else if (next) {
     title.textContent = `Próximo partido · J${next.jornada}`;
-    sub.textContent = `${fixtureWhen(next)} · ${fixtureTitle(next)} (${next.local ? 'casa' : 'fuera'})`;
+    sub.textContent = `${fixtureWhen(next)} · ${venueIcon(next)} ${fixtureTitle(next)}`;
     btn.onclick = () => openFixture(next);
   } else {
     title.textContent = `Nuevo ${word}`;
@@ -1043,7 +1044,8 @@ function renderCalendar(history) {
       <span class="fx-main"><b></b><small></small></span>
       <span class="fx-state"></span>`;
     b.querySelector('b').textContent = fixtureTitle(f);
-    b.querySelector('small').textContent = `${fixtureWhen(f)} · ${f.local ? 'Casa' : 'Fuera'}`;
+    b.querySelector('small').textContent = `${fixtureWhen(f)} · ${venueIcon(f)}`;
+    b.querySelector('small').title = f.local ? 'En casa' : 'Fuera';
     let state = '';
     if (rec) state = `✓ ${score(rec).join('-')}`;
     else if (live) state = `● ${score(S).join('-')}`;

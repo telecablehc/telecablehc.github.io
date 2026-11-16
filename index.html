@@ -49,8 +49,13 @@
         <span class="menu-btn-title">Totales</span>
         <span class="menu-btn-sub">Suma de todos los partidos: equipo y jugadoras</span>
       </button>
+      <div id="menuCalBox">
+        <h2 id="menuCalTitle">Calendario</h2>
+        <div id="menuCal" class="fixtures"></div>
+      </div>
       <h2 id="menuHistTitle">Historial</h2>
       <div id="menuHist"></div>
+      <button id="menuOther" class="ghost">+ Otro partido (amistoso, copa…)</button>
     </section>
 
     <!-- ===== Totales ===== -->
@@ -133,6 +138,7 @@
           <label>Partido oficial nº <input data-info="numero" type="text" inputmode="numeric"></label>
           <label>Fecha <input data-info="fecha" type="date"></label>
           <label>Hora <input data-info="hora" type="time"></label>
+          <label>Pabellón <input data-info="pabellon" type="text"></label>
         </div>
         <h2>Convocadas</h2>
         <p id="calledList"></p>
@@ -212,6 +218,7 @@
       <div class="dlg-actions">
         <button type="button" id="resPrint" class="ghost">Imprimir / PDF</button>
         <button type="button" id="resCsv" class="ghost">CSV minutos</button>
+        <button type="button" id="resDelete" class="ghost danger">Borrar</button>
         <button value="ok" class="primary">Cerrar</button>
       </div>
     </form>
@@ -237,6 +244,7 @@
 
   <script src="supabase.min.js"></script>
   <script src="cloud.js"></script>
+  <script src="calendar.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

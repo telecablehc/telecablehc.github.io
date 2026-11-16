@@ -61,6 +61,8 @@ function newSession(mode = 'partido', prev = null) {
       numero: '',
       fecha: today(),
       hora: '',
+      pabellon: '',
+      fixtureId: null, // jornada del calendario (calendar.js), si la hay
       notas: '',
     },
     partLen: same ? prev.partLen : DEFAULTS[mode].partLen,
@@ -282,16 +284,65 @@ function undo() {
 
 const isStarted = (X = S) => sum(X.partMs) > 0 || X.running || X.events.length > 0;
 
-// Empieza (o continúa) un partido o un entreno y abre la pantalla de juego
-function startSession(mode) {
-  if (S.mode !== mode) {
-    if (isStarted()) return; // hay otra sesión en curso: el menú no lo permite
+// Empieza (o continúa) un partido o un entreno y abre la pantalla de juego.
+// fixture: jornada del calendario; rellena rival, fecha, hora, jornada…
+function startSession(mode, fixture = null) {
+  const fixtureId = fixture ? fixture.id : null;
+  const sameGame = S.mode === mode && (S.info.fixtureId || null) === fixtureId;
+  if (isStarted() && !sameGame) return; // hay otra sesión en curso: el menú no lo permite
+  if (!sameGame) {
     S = newSession(mode, S);
     undoStack = [];
+    if (fixture) {
+      Object.assign(S.info, {
+        fixtureId: fixture.id,
+        rival: fixture.rival,
+        competicion: `${COMPETICION} ${TEMPORADA}`,
+        jornada: String(fixture.jornada),
+        fecha: fixture.fecha || today(),
+        hora: fixture.hora,
+        pabellon: fixture.pabellon,
+      });
+    }
     save();
   }
   go('juego');
   if (!S.squadOk && !isStarted()) openSquad();
+}
+
+// ---------- Calendario (calendar.js) ----------
+
+// Datos guardados de una jornada: por su id o, en partidos antiguos, por la fecha
+function recordForFixture(f, history) {
+  return history.find((r) => r.mode === 'partido' && r.info.fixtureId === f.id) ||
+    (f.fecha && history.find((r) => r.mode === 'partido' && !r.info.fixtureId && r.info.fecha === f.fecha)) ||
+    null;
+}
+
+function nextFixture(history) {
+  const pending = CALENDARIO.filter((f) => !recordForFixture(f, history));
+  return pending.find((f) => f.fecha && f.fecha >= today()) || pending.find((f) => !f.fecha) || null;
+}
+
+const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+function fixtureWhen(f) {
+  if (!f.fecha) return 'Fecha por confirmar';
+  const d = new Date(f.fecha + 'T12:00:00');
+  return `${DIAS[d.getDay()]} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}${f.hora ? ' · ' + f.hora : ''}`;
+}
+const fixtureTitle = (f) => `${f.local ? 'vs' : 'en'} ${f.rival}`;
+
+function openFixture(f) {
+  const history = load(KEY_HISTORY, []);
+  const rec = recordForFixture(f, history);
+  if (rec) return showRecord(rec);
+  if (isStarted() && S.info.fixtureId === f.id) return go('juego');
+  if (isStarted()) {
+    alert(`Hay un ${S.mode === 'partido' ? 'partido' : 'entreno'} en curso. Termínalo antes de empezar otro partido.`);
+    return;
+  }
+  if (!confirm(`¿Registrar la jornada ${f.jornada}: ${f.local ? 'Telecable HC – ' + f.rival : f.rival + ' – Telecable HC'}?`)) return;
+  startSession('partido', f);
 }
 
 // ---------- Sanciones (superioridad / inferioridad) ----------
@@ -907,7 +958,17 @@ function sessionStatus() {
 
 function renderHome() {
   const started = isStarted();
-  $('homeSubPartidos').textContent = started && S.mode === 'partido' ? `En curso: ${sessionStatus()}` : '';
+  let next = null;
+  if (!(started && S.mode === 'partido')) {
+    if (!renderHome.cacheAt || renderHome.cacheAt < Date.now() - 5000) {
+      renderHome.cache = nextFixture(load(KEY_HISTORY, [])); // no leer el historial 4 veces por segundo
+      renderHome.cacheAt = Date.now();
+    }
+    next = renderHome.cache;
+  }
+  $('homeSubPartidos').textContent = started && S.mode === 'partido'
+    ? `En curso: ${sessionStatus()}`
+    : next ? `Próximo: J${next.jornada} · ${fixtureWhen(next)} · ${fixtureTitle(next)}` : '';
   $('homeSubEntrenos').textContent = started && S.mode === 'entreno' ? `En curso: ${sessionStatus()}` : '';
 }
 
@@ -927,6 +988,8 @@ function renderMenu() {
   sub.className = 'menu-btn-sub';
   btn.append(title, sub);
 
+  const history = load(KEY_HISTORY, []);
+  const next = mode === 'partido' ? nextFixture(history) : null;
   if (started && S.mode === mode) {
     title.textContent = `Continuar ${word}`;
     sub.textContent = sessionStatus();
@@ -936,6 +999,10 @@ function renderMenu() {
     sub.textContent = `Termínalo antes de empezar un ${word}. Toca para ir al ${other}.`;
     btn.classList.add('busy');
     btn.onclick = () => go('juego');
+  } else if (next) {
+    title.textContent = `Próximo partido · J${next.jornada}`;
+    sub.textContent = `${fixtureWhen(next)} · ${fixtureTitle(next)} (${next.local ? 'casa' : 'fuera'})`;
+    btn.onclick = () => openFixture(next);
   } else {
     title.textContent = `Nuevo ${word}`;
     sub.textContent = mode === 'partido' ? 'Elegir convocadas y empezar' : 'Empezar a contar minutos';
@@ -943,9 +1010,46 @@ function renderMenu() {
   }
   box.append(btn);
 
-  $('menuTotals').hidden = mode !== 'partido';
-  $('menuHistTitle').textContent = mode === 'partido' ? 'Partidos jugados' : 'Entrenos';
-  renderHistory(mode, $('menuHist'));
+  const isMatch = mode === 'partido';
+  $('menuTotals').hidden = !isMatch;
+  $('menuCalBox').hidden = !isMatch;
+  $('menuOther').hidden = !isMatch;
+  if (isMatch) {
+    $('menuCalTitle').textContent = `Calendario · ${COMPETICION} ${TEMPORADA}`;
+    renderCalendar(history);
+    // en "Otros partidos" solo los que no son de ninguna jornada del calendario
+    const linked = new Set(CALENDARIO.map((f) => recordForFixture(f, history)).filter(Boolean).map((r) => r.id));
+    $('menuHistTitle').textContent = 'Otros partidos (amistosos, copa…)';
+    renderHistory(mode, $('menuHist'), (r) => !linked.has(r.id));
+  } else {
+    $('menuHistTitle').textContent = 'Entrenos';
+    renderHistory(mode, $('menuHist'));
+  }
+}
+
+// Un botón por jornada, con su estado
+function renderCalendar(history) {
+  const list = $('menuCal');
+  list.replaceChildren(...CALENDARIO.map((f) => {
+    const rec = recordForFixture(f, history);
+    const live = isStarted() && S.mode === 'partido' && S.info.fixtureId === f.id;
+    const b = document.createElement('button');
+    b.className = 'fixture' + (rec ? ' done' : live ? ' live' : '');
+    b.innerHTML = `
+      <span class="fx-j">J${f.jornada}</span>
+      <span class="fx-main"><b></b><small></small></span>
+      <span class="fx-state"></span>`;
+    b.querySelector('b').textContent = fixtureTitle(f);
+    b.querySelector('small').textContent = `${fixtureWhen(f)} · ${f.local ? 'Casa' : 'Fuera'}`;
+    let state = '';
+    if (rec) state = `✓ ${score(rec).join('-')}`;
+    else if (live) state = `● ${score(S).join('-')}`;
+    else if (f.resultado) state = `${f.resultado} · sin datos`;
+    b.querySelector('.fx-state').textContent = state;
+    b.title = rec ? 'Ver los datos de este partido' : live ? 'Partido en curso' : 'Registrar este partido';
+    b.onclick = () => openFixture(f);
+    return b;
+  }));
 }
 
 // ---------- Pestañas de la pantalla de juego ----------
@@ -1022,6 +1126,7 @@ function summaryHtml(X) {
     X.mode === 'entreno' ? ' (entreno)' : X.info.numero ? ` · Partido oficial nº ${e(X.info.numero)}` : ''}</h3>
     <p class="meta">Competición: <b>${e(X.info.competicion) || '—'}</b> · Fecha: <b>${fecha || '—'}</b> ·
     Jornada: <b>${e(X.info.jornada) || '—'}</b> · Hora: <b>${e(X.info.hora) || '—'}</b> ·
+    ${X.info.pabellon ? `Pabellón: <b>${e(X.info.pabellon)}</b> ·` : ''}
     Resultado: <b>${score(X).join(' - ')}</b></p>`;
 
   h += `<p><b>Convocadas:</b> ${called.map((p) => `${p.num} ${e(p.name)}`).join(', ')}</p>`;
@@ -1182,10 +1287,10 @@ function recordTitle(rec) {
 }
 
 // Lista de partidos o entrenos terminados (en el menú de cada sección)
-function renderHistory(mode, list) {
-  const history = load(KEY_HISTORY, []).filter((r) => r.mode === mode);
+function renderHistory(mode, list, filter = () => true) {
+  const history = load(KEY_HISTORY, []).filter((r) => r.mode === mode && filter(r));
   if (!history.length) {
-    list.innerHTML = `<p class="hint">Todavía no hay ${mode === 'partido' ? 'partidos' : 'entrenos'} terminados.</p>`;
+    list.innerHTML = `<p class="hint">Todavía no hay ${mode === 'partido' ? 'otros partidos' : 'entrenos'} terminados.</p>`;
   } else {
     list.replaceChildren(...history.map((rec) => {
       const row = document.createElement('div');
@@ -1385,6 +1490,21 @@ $('btnPrint').onclick = () => { commit(); save(); printSummary(S); };
 $('btnCsv').onclick = () => { commit(); save(); exportCsv(S); };
 $('resPrint').onclick = () => currentRecord && printSummary(currentRecord);
 $('resCsv').onclick = () => currentRecord && exportCsv(currentRecord);
+$('resDelete').onclick = () => {
+  if (!currentRecord || !confirm('¿Borrar los datos de este partido/entreno? No se puede deshacer.')) return;
+  store(KEY_HISTORY, load(KEY_HISTORY, []).filter((x) => x.id !== currentRecord.id));
+  cloudMarkDeleted(currentRecord.id);
+  $('dlgResults').close();
+  render();
+  toast('Borrado');
+};
+$('menuOther').onclick = () => {
+  if (isStarted() && !(S.mode === 'partido' && !S.info.fixtureId)) {
+    alert('Hay un partido o entreno en curso. Termínalo antes de empezar otro partido.');
+    return;
+  }
+  startSession('partido');
+};
 
 document.querySelectorAll('[data-poss]').forEach((b) => (b.onclick = () => setPossession(b.dataset.poss)));
 document.querySelectorAll('[data-act]').forEach((b) => (b.onclick = () => ACTIONS[b.dataset.act]()));

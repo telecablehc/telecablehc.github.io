@@ -96,6 +96,10 @@
     <main>
       <!-- Pista -->
       <section id="tab-pista" class="tab">
+        <div id="reopenBanner" class="banner info" hidden>
+          Estás corrigiendo un partido ya terminado. Pulsa «Terminar» para guardar los cambios.
+          <button id="btnDiscard" class="ghost small">Descartar cambios</button>
+        </div>
         <button id="btnSquad" class="banner" hidden>Elige las convocadas del partido antes de empezar</button>
         <div class="actions">
           <button data-act="golFavor" class="act good">Gol a favor</button>
@@ -116,6 +120,7 @@
 
       <!-- Eventos -->
       <section id="tab-eventos" class="tab" hidden>
+        <button id="btnAddPast" class="ghost add-past">+ Añadir evento con minuto</button>
         <div id="eventList"></div>
       </section>
 
@@ -177,6 +182,30 @@
     </div>
   </dialog>
 
+  <!-- Editar los datos de un partido/entreno terminado -->
+  <dialog id="dlgEditRec">
+    <h3>Editar datos</h3>
+    <div class="form">
+      <label>Nuestro equipo <input data-rec="team" type="text"></label>
+      <label>Rival <input data-rec="rival" type="text"></label>
+      <label>Competición <input data-rec="competicion" type="text"></label>
+      <label>Jornada <input data-rec="jornada" type="text"></label>
+      <label>Partido oficial nº <input data-rec="numero" type="text" inputmode="numeric"></label>
+      <label>Fecha <input data-rec="fecha" type="date"></label>
+      <label>Hora <input data-rec="hora" type="time"></label>
+      <label>Pabellón <input data-rec="pabellon" type="text"></label>
+    </div>
+    <h4>Convocadas</h4>
+    <p class="hint">Las que jugaron minutos no se pueden quitar.</p>
+    <div id="recSquad" class="pick"></div>
+    <h4>Observaciones</h4>
+    <textarea data-rec="notas" rows="5"></textarea>
+    <div class="dlg-actions">
+      <button type="button" id="recCancel" class="ghost">Cancelar</button>
+      <button type="button" id="recSave" class="primary">Guardar</button>
+    </div>
+  </dialog>
+
   <dialog id="dlgSettings">
     <form method="dialog">
       <h3>Ajustes</h3>
@@ -218,6 +247,8 @@
       <div class="dlg-actions">
         <button type="button" id="resPrint" class="ghost">Imprimir / PDF</button>
         <button type="button" id="resCsv" class="ghost">CSV minutos</button>
+        <button type="button" id="resEdit" class="ghost">Editar datos</button>
+        <button type="button" id="resReopen" class="ghost">Reabrir</button>
         <button type="button" id="resDelete" class="ghost danger">Borrar</button>
         <button value="ok" class="primary">Cerrar</button>
       </div>

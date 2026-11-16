@@ -383,3 +383,9 @@ td.empty { color: var(--muted); text-align: center; }
 #menuHist .hist-item.win  { background: var(--win-bg);  border-color: var(--on); }
 #menuHist .hist-item.draw { background: var(--draw-bg); border-color: var(--draw); }
 #menuHist .hist-item.loss { background: var(--loss-bg); border-color: var(--warn); }
+
+/* Corregir partidos terminados */
+.banner.info { background: var(--live-bg); color: var(--text); border: 1px solid var(--blue); font-weight: 600;
+  display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; text-align: left; }
+.add-past { width: 100%; margin-top: 12px; padding: 12px; font-weight: 600; }
+#dlgEditRec textarea { width: 100%; }

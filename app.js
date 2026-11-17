@@ -555,7 +555,11 @@ function ask(title, fields, initial = {}) {
         } else if (f.type === 'player') {
           const grid = document.createElement('div');
           grid.className = 'pick';
-          S.players.filter((p) => p.called).sort((a, b) => b.on - a.on).forEach((p) => {
+          // all: toda la plantilla (p. ej. en el análisis de vídeo); si no, solo las convocadas, primero las de pista
+          const list = f.all
+            ? rosterOrder(PLAYERS.map((p) => ({ ...p, on: false })))
+            : S.players.filter((p) => p.called).sort((a, b) => b.on - a.on);
+          list.forEach((p) => {
             const b = document.createElement('button');
             b.type = 'button';
             b.className = 'pick-btn' + (p.on ? ' on' : '') + (vals[f.key] === p.num ? ' active' : '');
@@ -567,6 +571,15 @@ function ask(title, fields, initial = {}) {
             };
             grid.append(b);
           });
+          // optional: botón "Sin jugadora" (se guarda como 0)
+          if (f.optional) {
+            const none = document.createElement('button');
+            none.type = 'button';
+            none.className = 'pick-btn none' + (vals[f.key] === 0 ? ' active' : '');
+            none.innerHTML = '<b>—</b><span>Sin jugadora</span>';
+            none.onclick = () => { vals[f.key] = 0; if (complete()) close(vals); else draw(); };
+            grid.append(none);
+          }
           wrap.append(grid);
         } else {
           const input = document.createElement('input');
@@ -658,6 +671,8 @@ function render() {
   if (route === 'totales') renderTotals();
   if (route === 'plan') renderPlan();
   if (route === 'biblioteca') renderLibrary();
+  if (route === 'video') renderVideoList();
+  if (route === 'analisis') renderAnalysis();
 
   $('btnPlay').textContent = S.running ? '❚❚' : '▶';
   $('btnPlay').classList.toggle('running', S.running);
@@ -931,7 +946,7 @@ function toast(msg) {
 // La pantalla va en la dirección (#partidos, #juego…), así el botón
 // «atrás» del móvil funciona.
 
-const ROUTES = ['inicio', 'partidos', 'entrenos', 'juego', 'totales', 'plan', 'biblioteca', 'video'];
+const ROUTES = ['inicio', 'partidos', 'entrenos', 'juego', 'totales', 'plan', 'biblioteca', 'video', 'analisis'];
 let route = 'inicio';
 const routeStack = [];
 const sectionOf = (mode) => (mode === 'entreno' ? 'entrenos' : 'partidos');
@@ -941,6 +956,7 @@ function parentRoute(r) {
   if (r === 'juego') return sectionOf(S.mode);
   if (r === 'totales') return 'partidos';
   if (r === 'plan' || r === 'biblioteca') return 'entrenos';
+  if (r === 'analisis') return 'video';
   return 'inicio';
 }
 
@@ -959,8 +975,10 @@ function applyRoute() {
   // dirección: "#partidos", "#juego", "#plan/<id>"…
   const [h, arg] = location.hash.slice(1).split('/');
   route = ROUTES.includes(h) ? h : 'inicio';
+  if (route !== 'analisis') pauseAnalysisVideo(); // al salir del análisis, el vídeo se para
   if (route === 'plan') currentPlanId = arg || null;
-  const full = route + (route === 'plan' ? '/' + currentPlanId : '');
+  if (route === 'analisis') currentVideoId = arg || null;
+  const full = route + (route === 'plan' ? '/' + currentPlanId : route === 'analisis' ? '/' + currentVideoId : '');
   if (routeStack[routeStack.length - 2] === full) routeStack.pop();
   else if (routeStack[routeStack.length - 1] !== full) routeStack.push(full);
 
@@ -982,6 +1000,7 @@ function renderHeader() {
     plan: 'Plan de entreno',
     biblioteca: 'Biblioteca de ejercicios',
     video: 'Análisis - Vídeo',
+    analisis: (curVideo() || {}).titulo || 'Análisis',
     juego: S.mode === 'partido' ? `Partido${S.info.rival ? ' vs ' + S.info.rival : ''}` : `Entreno${S.info.objetivo ? ' · ' + S.info.objetivo : ''}`,
   };
   $('screenTitle').textContent = titles[route];
@@ -1571,6 +1590,7 @@ async function exportBackup() {
     session: S,
     planes: loadPlans(),
     ejercicios: loadExercises(),
+    videos: loadVideos(),
   };
   const name = `telecable-copia-${today()}.json`;
   const file = new File([JSON.stringify(data)], name, { type: 'application/json' });
@@ -1633,6 +1653,7 @@ async function importBackup(file) {
   };
   const nPlans = mergeDocs(KEY_PLANS, 'plan', data.planes);
   const nEx = mergeDocs(KEY_EXERCISES, 'ejercicio', data.ejercicios);
+  mergeDocs(KEY_VIDEOS, 'video', data.videos);
 
   // Partido en curso: solo si en este dispositivo no hay nada empezado
   let session = false;
@@ -1788,6 +1809,7 @@ function startupChecks() {
 
 setInterval(tick, 250);
 initEntrenos();   // planes de entreno y biblioteca (entrenos.js)
+initVideo();      // análisis de vídeo (video.js)
 cloudInit();      // cuenta y sincronización (cloud.js)
 applyRoute();     // muestra la pantalla de la dirección (por defecto, el índice)
 updateWakeLock();

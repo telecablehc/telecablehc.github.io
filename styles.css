@@ -495,3 +495,58 @@ dialog.draw-dialog { width: min(1100px, calc(100vw - 12px)); max-height: 96vh; p
 .empty-screen { text-align: center; padding: 12vh 16px; }
 .empty-icon { font-size: 56px; }
 .empty-screen h2 { font-size: 22px; text-transform: none; letter-spacing: 0; color: var(--text); }
+
+/* ===== Análisis de vídeo ===== */
+#screen-analisis, #screen-video { max-width: 980px; margin: 0 auto; }
+.va-head { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+.va-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.va-title b { font-size: 18px; }
+.va-title small { color: var(--muted); }
+.va-pick { background: var(--panel); border: 1px dashed var(--line); border-radius: 14px; padding: 20px; text-align: center; }
+.file-btn { display: inline-block; padding: 12px 18px; border-radius: 10px; cursor: pointer; text-decoration: none; font-weight: 600; }
+.va-stage { position: relative; background: #000; border-radius: 12px; overflow: hidden; }
+.va-stage video { display: block; width: 100%; max-height: 62vh; background: #000; }
+.va-overlay { position: absolute; pointer-events: none; display: none; }
+.va-overlay.visible { display: block; }
+.va-overlay.editing { pointer-events: auto; touch-action: none; cursor: crosshair; outline: 2px dashed rgba(255,255,255,.6); }
+.va-rec { position: absolute; top: 8px; left: 8px; background: var(--warn); color: #fff; font-weight: 700; padding: 4px 10px; border-radius: 8px; font-size: 13px; }
+.va-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.va-controls input[type=range] { flex: 1 1 100%; order: 10; accent-color: var(--brand); }
+.va-controls select { padding: 7px 8px; }
+.va-play { width: 52px; height: 44px; padding: 0; font-size: 18px; }
+.va-time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; flex: 1; text-align: center; }
+.va-tv { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; text-align: center; }
+.va-clock { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.va-clock-time { font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 130px; }
+.va-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.va-auto { margin: 0 0 0 auto; font-size: 14px; }
+.va-drawbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.va-draw-t { font-weight: 700; margin-right: 6px; }
+.va-color { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); padding: 0; }
+.va-color.active { outline: 3px solid var(--brand); outline-offset: 1px; }
+.va-tags { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.va-tag {
+  min-height: 48px; border-radius: 12px; border: 2px solid var(--tc); background: var(--panel); color: var(--text); font-weight: 700;
+  box-shadow: inset 5px 0 0 var(--tc);
+}
+.va-tag:disabled { opacity: .4; }
+.va-tag:active { transform: scale(.97); }
+.va-tabs { margin: 16px 0 4px; }
+.chip-btn[style*="--tc"].active { background: var(--tc); border-color: var(--tc); }
+.va-mark { display: flex; gap: 8px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-left: 5px solid var(--tc); border-radius: 10px; padding: 6px 8px; margin-bottom: 6px; }
+.va-mark-go { flex: 1; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; text-align: left; background: none; border: 0; padding: 4px; min-width: 0; }
+.va-t { font-variant-numeric: tabular-nums; color: var(--brand); }
+.va-type { font-weight: 700; }
+.va-who { color: var(--muted); }
+.va-note { flex-basis: 100%; color: var(--muted); }
+.va-note:empty { display: none; }
+.va-tema { margin: 14px 0 6px; color: var(--brand); }
+.va-clip { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.va-clip-main { display: flex; flex-direction: column; min-width: 0; }
+.va-clip-main small { color: var(--muted); }
+.va-clip .small-btn { margin-top: 0; padding: 6px 12px; }
+.pick-btn.none { border-style: dashed; }
+.field-col { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; font-size: 14px; color: var(--muted); }
+.field-col input { padding: 10px; font-size: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); }
+#dlgVideo select, #dvPartido { padding: 10px; font-size: 15px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); }
+#vaFilters select, .va-controls select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; font-size: 14px; }

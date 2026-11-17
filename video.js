@@ -1,0 +1,781 @@
+// AppHóquei — Análisis de vídeo
+// 1) Marcar acciones en el vídeo (con su tiempo) y saltar a ellas, con filtros.
+// 2) Clips: tramos del vídeo (inicio–fin) organizados por tema; se pueden ver y descargar.
+// 3) Dibujar sobre el vídeo (flechas, líneas, círculos, lápiz). Al verlo, el vídeo se para en cada dibujo.
+//
+// Fuentes:
+// - Archivo del tablet/ordenador: todo funciona. El archivo NO se sube a la nube (es muy grande):
+//   en cada sesión se vuelve a elegir; las marcas, clips y dibujos sí se sincronizan.
+// - OK Liga TV: la plataforma no deja que otra app controle su vídeo. Se guarda el enlace y se usa
+//   un cronómetro sincronizado a mano para marcar; ver/dibujar/descargar clips necesita el archivo.
+// Usa funciones de app.js / entrenos.js solo en tiempo de ejecución.
+'use strict';
+
+const KEY_VIDEOS = 'hoquei.videos';
+const MARK_TYPES = [
+  ['golFavor', 'Gol a favor', '#1f9d55'], ['golContra', 'Gol en contra', '#d64545'],
+  ['remate', 'Remate', '#2f6fdb'], ['ocasion', 'Ocasión', '#7b3fe4'],
+  ['perdida', 'Pérdida', '#e07b00'], ['recuperacion', 'Recuperación', '#14a3a3'],
+  ['falta', 'Falta', '#8a6d3b'], ['bolaParada', 'Bola parada', '#b8860b'],
+  ['defensa', 'Defensa', '#5f7d8c'], ['otro', 'Otro', '#888888'],
+];
+const markType = (k) => MARK_TYPES.find((m) => m[0] === k) || ['otro', 'Otro', '#888'];
+const PRE_ROLL = 5;   // al saltar a una acción, se empieza unos segundos antes
+const POST_ROLL = 3;  // en "ver todas", se sigue unos segundos después
+const DRAW_HOLD = 3;  // segundos que el vídeo se queda parado en un dibujo
+const DRAW_COLORS = ['#ff3b30', '#ffd60a', '#ffffff', '#0a84ff', '#30d158'];
+
+let currentVideoId = null;
+let vaTab = 'marks';
+let vaFilter = { tipo: 'todos', num: 'todas', tema: 'todos' };
+const loadedFiles = {}; // id del análisis → { url, name, size } (solo en esta sesión)
+let vaClock = { running: false, base: 0, since: 0 }; // cronómetro (OK Liga TV)
+let vaClipStart = null;  // inicio de un clip que se está creando
+let vaPlaylist = null;   // reproducción de una lista de tramos
+let vaHold = null;       // pausa automática en un dibujo
+let vaLastTime = 0;
+let vaDrawing = null;    // edición de un dibujo sobre el vídeo
+
+// ---------- Datos ----------
+
+const loadVideos = () => load(KEY_VIDEOS, []);
+const findVideo = (id) => loadVideos().find((v) => v.id === id) || null;
+const saveVideo = (v) => upsert(KEY_VIDEOS, 'video', v);
+const curVideo = () => findVideo(currentVideoId);
+const isFileSource = (v) => v.fuente === 'archivo';
+
+function updateVideo(fn) {
+  const v = curVideo();
+  if (!v) return;
+  fn(v);
+  saveVideo(v);
+  renderAnalysis();
+}
+
+const playerName = (num) => {
+  const p = PLAYERS.find((x) => x.num === num);
+  return p ? `#${p.num} ${p.name}` : '';
+};
+
+// ---------- Lista de análisis ----------
+
+function renderVideoList() {
+  const list = loadVideos().sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '') || (b.creado || '').localeCompare(a.creado || ''));
+  const box = $('vList');
+  if (!list.length) {
+    box.innerHTML = '<p class="hint">Todavía no hay análisis. Crea uno con «Nuevo análisis».</p>';
+    return;
+  }
+  box.replaceChildren(...list.map((v) => {
+    const b = document.createElement('button');
+    b.className = 'fixture';
+    b.innerHTML = '<span class="fx-j"></span><span class="fx-main"><b></b><small></small></span><span class="fx-state"></span>';
+    b.querySelector('.fx-j').textContent = v.fuente === 'okliga' ? '📺' : '🎞️';
+    b.querySelector('b').textContent = v.titulo || 'Análisis';
+    const fecha = v.fecha ? v.fecha.split('-').reverse().join('/') : '';
+    b.querySelector('small').textContent = `${fecha}${fecha ? ' · ' : ''}${v.fuente === 'okliga' ? 'OK Liga TV' : 'Archivo'}`;
+    const nDraw = v.marcas.filter((m) => m.dibujo).length;
+    b.querySelector('.fx-state').textContent =
+      `${v.marcas.length - nDraw} acciones · ${v.clips.length} clips${nDraw ? ` · ${nDraw} dibujos` : ''}`;
+    b.onclick = () => go('analisis/' + v.id);
+    return b;
+  }));
+}
+
+// Diálogo "Nuevo análisis" / "Editar"
+function openVideoDialog(existing = null) {
+  const v = existing ? JSON.parse(JSON.stringify(existing)) : {
+    id: uid(), titulo: '', fecha: today(), fuente: 'archivo', url: '', partido: '', marcas: [], clips: [],
+    creado: new Date().toISOString(),
+  };
+  $('dvTitle').textContent = existing ? 'Datos del análisis' : 'Nuevo análisis';
+  $('dvTitulo').value = v.titulo;
+  $('dvFecha').value = v.fecha || '';
+  $('dvUrl').value = v.url || '';
+  $('dvDelete').hidden = !existing;
+  $('dvPartido').replaceChildren(
+    new Option('— Ninguno —', ''),
+    ...CALENDARIO.map((f) => new Option(`J${f.jornada} · ${f.local ? '🏠' : '✈️'} ${f.rival}`, f.id)),
+  );
+  $('dvPartido').value = v.partido || '';
+  $('dvPartido').onchange = () => {
+    const f = CALENDARIO.find((x) => x.id === $('dvPartido').value);
+    if (!f) return;
+    if (!$('dvTitulo').value.trim()) $('dvTitulo').value = `J${f.jornada} · ${f.local ? 'Telecable HC – ' + f.rival : f.rival + ' – Telecable HC'}`;
+    if (f.fecha) $('dvFecha').value = f.fecha;
+  };
+  const drawFuente = () => {
+    $('dvFuente').querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.f === v.fuente));
+    $('dvUrlWrap').hidden = v.fuente !== 'okliga';
+  };
+  $('dvFuente').querySelectorAll('button').forEach((b) => (b.onclick = () => { v.fuente = b.dataset.f; drawFuente(); }));
+  drawFuente();
+  $('dvCancel').onclick = () => $('dlgVideo').close();
+  $('dvDelete').onclick = () => {
+    if (!confirm('¿Borrar este análisis con todas sus acciones, clips y dibujos? El archivo de vídeo no se borra.')) return;
+    remove(KEY_VIDEOS, 'video', v.id);
+    $('dlgVideo').close();
+    go('video');
+  };
+  $('dvOk').onclick = () => {
+    v.titulo = $('dvTitulo').value.trim() || 'Análisis';
+    v.fecha = $('dvFecha').value;
+    v.partido = $('dvPartido').value;
+    v.url = $('dvUrl').value.trim();
+    if (v.fuente === 'okliga' && v.url && !/^https:\/\/(www\.)?okliga\.tv\//i.test(v.url)) {
+      alert('El enlace debe ser de OK Liga TV (https://www.okliga.tv/…).');
+      return;
+    }
+    saveVideo(v);
+    $('dlgVideo').close();
+    if (existing) renderAnalysis(); else go('analisis/' + v.id);
+  };
+  $('dlgVideo').showModal();
+}
+
+// ---------- Pantalla de un análisis ----------
+
+const vid = () => $('vaVideo');
+
+// Tiempo actual (del vídeo o del cronómetro de OK Liga TV), en segundos
+function vaNow() {
+  const v = curVideo();
+  if (v && isFileSource(v)) return vid().currentTime || 0;
+  return vaClock.base + (vaClock.running ? (performance.now() - vaClock.since) / 1000 : 0);
+}
+
+function fmtVT(sec) {
+  sec = Math.max(0, sec || 0);
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
+  return h ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+function parseVT(text) {
+  const parts = String(text || '').trim().split(':').map((x) => x.trim());
+  if (!parts.length || parts.some((x) => !/^\d+$/.test(x)) || parts.length > 3) return null;
+  return parts.reduce((acc, x) => acc * 60 + +x, 0);
+}
+
+function renderAnalysis() {
+  const v = curVideo();
+  if (!v) { location.replace('#video'); return; }
+  const file = isFileSource(v);
+
+  // Cabecera
+  const fecha = v.fecha ? v.fecha.split('-').reverse().join('/') : '';
+  $('vaHead').innerHTML = '<div class="va-title"><b></b><small></small></div><button class="ghost small">Editar datos</button>';
+  $('vaHead').querySelector('b').textContent = v.titulo;
+  $('vaHead').querySelector('small').textContent = `${fecha}${fecha ? ' · ' : ''}${file ? 'Archivo de vídeo' : 'OK Liga TV'}`;
+  $('vaHead').querySelector('button').onclick = () => openVideoDialog(v);
+
+  // Fuente
+  $('vaFileBox').hidden = !file;
+  $('vaTvBox').hidden = file;
+  const loaded = loadedFiles[v.id];
+  if (file) {
+    $('vaPickFile').hidden = !!loaded;
+    $('vaStage').hidden = !loaded;
+    $('vaControls').hidden = !loaded;
+    $('vaPickText').textContent = v.archivo
+      ? `Elige el archivo «${v.archivo.nombre}» (${(v.archivo.tam / 1048576).toFixed(0)} MB). El vídeo no se sube a la nube; solo las marcas, clips y dibujos.`
+      : 'Elige el archivo de vídeo del partido o del entreno. El vídeo no se sube a la nube; solo las marcas, clips y dibujos.';
+    if (loaded && vid().dataset.src !== loaded.url) { vid().src = loaded.url; vid().dataset.src = loaded.url; }
+  } else {
+    $('vaTvLink').href = v.url || 'https://www.okliga.tv/home';
+    $('vaTvLink').textContent = v.url ? 'Abrir el partido en OK Liga TV ↗' : 'Abrir OK Liga TV ↗ (añade el enlace en «Editar datos»)';
+  }
+  $('vaDraw').hidden = !file;
+  $('vaAutoPause').parentElement.hidden = !file;
+  $('vaDraw').disabled = $('vaClip').disabled = file && !loaded;
+
+  // Botones de acciones
+  $('vaTags').replaceChildren(...MARK_TYPES.map(([k, label, color]) => {
+    const b = document.createElement('button');
+    b.className = 'va-tag';
+    b.style.setProperty('--tc', color);
+    b.textContent = label;
+    b.disabled = file && !loaded;
+    b.onclick = () => addMark(k);
+    return b;
+  }));
+
+  renderClipBar();
+  $('vaTabMarks').classList.toggle('active', vaTab === 'marks');
+  $('vaTabClips').classList.toggle('active', vaTab === 'clips');
+  if (vaTab === 'marks') renderMarks(v); else renderClips(v);
+  vaTick();
+}
+
+// ---------- 1) Acciones ----------
+
+async function addMark(tipo) {
+  const t = vaNow();
+  const label = markType(tipo)[1];
+  // la nota va primero: al tocar la jugadora se guarda directamente
+  const ans = await ask(`${label} · ${fmtVT(t)}`, [
+    { key: 'nota', type: 'num', label: 'Nota (opcional, escríbela antes de elegir la jugadora)', placeholder: 'Ej.: salida por la izquierda' },
+    { key: 'num', type: 'player', label: 'Jugadora', all: true, optional: true },
+  ]);
+  if (!ans) return;
+  updateVideo((x) => {
+    x.marcas.push({ id: uid(), t, tipo, num: ans.num || null, nota: ans.nota || '' });
+    x.marcas.sort((a, b) => a.t - b.t);
+  });
+  toast(`${label} marcado en ${fmtVT(t)}`);
+}
+
+function filteredMarks(v) {
+  return v.marcas.filter((m) =>
+    (vaFilter.tipo === 'todos' || (vaFilter.tipo === 'dibujos' ? !!m.dibujo : m.tipo === vaFilter.tipo && !m.dibujo)) &&
+    (vaFilter.num === 'todas' || m.num === vaFilter.num));
+}
+
+function chip(label, active, onclick, color) {
+  const b = document.createElement('button');
+  b.className = 'chip-btn' + (active ? ' active' : '');
+  if (color) b.style.setProperty('--tc', color);
+  b.textContent = label;
+  b.onclick = onclick;
+  return b;
+}
+
+function renderMarks(v) {
+  const counts = {};
+  v.marcas.forEach((m) => { const k = m.dibujo ? 'dibujos' : m.tipo; counts[k] = (counts[k] || 0) + 1; });
+  const players = [...new Set(v.marcas.map((m) => m.num).filter(Boolean))];
+  $('vaFilters').replaceChildren(
+    chip(`Todas (${v.marcas.length})`, vaFilter.tipo === 'todos', () => { vaFilter.tipo = 'todos'; renderAnalysis(); }),
+    ...MARK_TYPES.filter(([k]) => counts[k]).map(([k, label, color]) =>
+      chip(`${label} (${counts[k]})`, vaFilter.tipo === k, () => { vaFilter.tipo = k; renderAnalysis(); }, color)),
+    ...(counts.dibujos ? [chip(`✏️ Dibujos (${counts.dibujos})`, vaFilter.tipo === 'dibujos', () => { vaFilter.tipo = 'dibujos'; renderAnalysis(); })] : []),
+    ...(players.length ? [(() => {
+      const sel = document.createElement('select');
+      sel.className = 'ghost';
+      sel.append(new Option('Todas las jugadoras', 'todas'), ...rosterOrder(PLAYERS.filter((p) => players.includes(p.num))).map((p) => new Option(`#${p.num} ${p.name}`, p.num)));
+      sel.value = String(vaFilter.num);
+      sel.onchange = () => { vaFilter.num = sel.value === 'todas' ? 'todas' : +sel.value; renderAnalysis(); };
+      return sel;
+    })()] : []),
+  );
+
+  const list = filteredMarks(v);
+  const box = $('vaList');
+  if (!v.marcas.length) {
+    box.innerHTML = `<p class="hint">${isFileSource(v) ? 'Reproduce el vídeo y pulsa un botón de «Marcar acción» cuando ocurra.' : 'Pon en marcha el cronómetro a la vez que el vídeo de OK Liga TV y pulsa un botón de «Marcar acción» cuando ocurra.'}</p>`;
+    return;
+  }
+  const playAll = document.createElement('button');
+  playAll.className = 'ghost add-past';
+  playAll.textContent = `▶ Ver seguidas (${list.length})`;
+  playAll.hidden = !isFileSource(v) || !loadedFiles[v.id] || !list.length;
+  playAll.onclick = () => playSegments(list.map((m) => [Math.max(0, m.t - PRE_ROLL), m.t + (m.dibujo ? 0.1 : POST_ROLL)]));
+  box.replaceChildren(playAll, ...list.map((m) => {
+    const [, label, color] = m.dibujo ? ['', '✏️ Dibujo', '#555'] : markType(m.tipo);
+    const row = document.createElement('div');
+    row.className = 'va-mark';
+    row.style.setProperty('--tc', color);
+    row.innerHTML = '<button class="va-mark-go"><b class="va-t"></b><span class="va-type"></span><span class="va-who"></span><small class="va-note"></small></button><button class="ghost small danger">Borrar</button>';
+    row.querySelector('.va-t').textContent = fmtVT(m.t);
+    row.querySelector('.va-type').textContent = label;
+    row.querySelector('.va-who').textContent = m.num ? playerName(m.num) : '';
+    row.querySelector('.va-note').textContent = m.nota || '';
+    row.querySelector('.va-mark-go').onclick = () => jumpTo(m.dibujo ? m.t : m.t - PRE_ROLL, m);
+    row.querySelector('.danger').onclick = () => {
+      if (!confirm('¿Borrar esta marca?')) return;
+      updateVideo((x) => (x.marcas = x.marcas.filter((y) => y.id !== m.id)));
+    };
+    return row;
+  }));
+}
+
+function jumpTo(t, mark = null) {
+  const v = curVideo();
+  t = Math.max(0, t);
+  if (!isFileSource(v)) {
+    vaClock = { running: false, base: t, since: 0 };
+    vaTick();
+    alert(`Ve al minuto ${fmtVT(t)} en OK Liga TV y pulsa ▶ en los dos a la vez.`);
+    return;
+  }
+  if (!loadedFiles[v.id]) { alert('Primero elige el archivo de vídeo.'); return; }
+  vaPlaylist = null;
+  vid().currentTime = t;
+  if (mark && mark.dibujo) { vid().pause(); showOverlay(mark.dibujo); }
+  else vid().play();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Reproduce varios tramos seguidos [[inicio, fin], …]
+function playSegments(segs, loop = false) {
+  if (!segs.length) return;
+  vaPlaylist = { segs, i: 0, loop };
+  vid().currentTime = segs[0][0];
+  vid().play();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ---------- 2) Clips ----------
+
+function renderClipBar() {
+  const bar = $('vaClipBar');
+  if (vaClipStart == null) { bar.hidden = true; return; }
+  bar.hidden = false;
+  bar.innerHTML = `<span>✂️ Clip desde <b>${fmtVT(vaClipStart)}</b>. Avanza hasta el final y pulsa «Marcar fin».</span>
+    <span class="row-btns"><button class="primary small-btn" id="vaClipEnd">Marcar fin</button><button class="ghost small" id="vaClipCancel">Cancelar</button></span>`;
+  $('vaClipEnd').onclick = finishClip;
+  $('vaClipCancel').onclick = () => { vaClipStart = null; renderClipBar(); };
+}
+
+function startClip() {
+  vaClipStart = vaNow();
+  renderClipBar();
+  toast(`Inicio del clip: ${fmtVT(vaClipStart)}`);
+}
+
+async function finishClip() {
+  const end = vaNow();
+  if (end - vaClipStart < 1) { alert('El final del clip tiene que ser después del inicio (al menos 1 segundo).'); return; }
+  const v = curVideo();
+  const temas = [...new Set(v.clips.map((c) => c.tema).filter(Boolean))];
+  const ans = await ask(`Clip ${fmtVT(vaClipStart)} – ${fmtVT(end)}`, [
+    { key: 'nombre', type: 'num', label: 'Nombre del clip', required: true, placeholder: 'Ej.: Salida de presión 2x1' },
+    ...(temas.length ? [{ key: 'temaSel', type: 'seg', label: 'Tema', options: [...temas.map((t) => [t, t]), ['__nuevo', '＋ Otro tema']] }] : []),
+    { key: 'tema', type: 'num', label: temas.length ? 'Nuevo tema (si eliges «Otro tema»)' : 'Tema (opcional)', placeholder: 'Ej.: Bolas paradas',
+      show: (x) => !temas.length || x.temaSel === '__nuevo' },
+  ], temas.length ? { temaSel: temas[temas.length - 1] } : {});
+  if (!ans) return;
+  const tema = ans.temaSel && ans.temaSel !== '__nuevo' ? ans.temaSel : (ans.tema || '').trim();
+  const start = vaClipStart;
+  vaClipStart = null;
+  updateVideo((x) => x.clips.push({ id: uid(), nombre: ans.nombre.trim(), tema, inicio: start, fin: end }));
+  vaTab = 'clips';
+  renderAnalysis();
+  toast('Clip guardado');
+}
+
+function renderClips(v) {
+  const temas = [...new Set(v.clips.map((c) => c.tema || 'Sin tema'))];
+  $('vaFilters').replaceChildren(
+    chip(`Todos (${v.clips.length})`, vaFilter.tema === 'todos', () => { vaFilter.tema = 'todos'; renderAnalysis(); }),
+    ...temas.map((t) => chip(`${t} (${v.clips.filter((c) => (c.tema || 'Sin tema') === t).length})`, vaFilter.tema === t, () => { vaFilter.tema = t; renderAnalysis(); })),
+  );
+  const box = $('vaList');
+  if (!v.clips.length) {
+    box.innerHTML = '<p class="hint">Para crear un clip: ve al inicio de la jugada, pulsa «✂️ Crear clip», avanza hasta el final y pulsa «Marcar fin».</p>';
+    return;
+  }
+  const canPlay = isFileSource(v) && !!loadedFiles[v.id];
+  const groups = {};
+  v.clips.filter((c) => vaFilter.tema === 'todos' || (c.tema || 'Sin tema') === vaFilter.tema)
+    .forEach((c) => (groups[c.tema || 'Sin tema'] = groups[c.tema || 'Sin tema'] || []).push(c));
+  box.replaceChildren(...Object.entries(groups).flatMap(([tema, clips]) => {
+    const h = document.createElement('h4');
+    h.className = 'va-tema';
+    h.textContent = tema;
+    return [h, ...clips.map((c) => {
+      const nDraw = v.marcas.filter((m) => m.dibujo && m.t >= c.inicio && m.t <= c.fin).length;
+      const row = document.createElement('div');
+      row.className = 'va-clip';
+      row.innerHTML = `<div class="va-clip-main"><b></b><small></small></div>
+        <div class="row-btns">
+          <button class="primary small-btn va-c-play">▶ Ver</button>
+          <button class="ghost small va-c-dl">⬇ Descargar</button>
+          <button class="ghost small va-c-ed">Editar</button>
+          <button class="ghost small danger va-c-del">Borrar</button>
+        </div>`;
+      row.querySelector('b').textContent = c.nombre;
+      row.querySelector('small').textContent = `${fmtVT(c.inicio)} – ${fmtVT(c.fin)} · ${Math.round(c.fin - c.inicio)} s${nDraw ? ` · ✏️ ${nDraw} dibujo${nDraw > 1 ? 's' : ''}` : ''}`;
+      const play = row.querySelector('.va-c-play');
+      if (canPlay) play.onclick = () => playSegments([[c.inicio, c.fin]], true);
+      else if (isFileSource(v)) play.onclick = () => alert('Primero elige el archivo de vídeo.');
+      else { play.textContent = '📺 Ver en OK Liga TV'; play.onclick = () => alert(`Ve a ${fmtVT(c.inicio)} en OK Liga TV (hasta ${fmtVT(c.fin)}).`); }
+      const dl = row.querySelector('.va-c-dl');
+      dl.hidden = !isFileSource(v);
+      dl.onclick = () => (canPlay ? downloadClip(c, dl) : alert('Primero elige el archivo de vídeo.'));
+      row.querySelector('.va-c-ed').onclick = async () => {
+        const ans = await ask('Editar clip', [
+          { key: 'nombre', type: 'num', label: 'Nombre', required: true },
+          { key: 'tema', type: 'num', label: 'Tema' },
+          { key: 'inicio', type: 'num', label: 'Inicio (mm:ss)', required: true },
+          { key: 'fin', type: 'num', label: 'Fin (mm:ss)', required: true },
+        ], { nombre: c.nombre, tema: c.tema || '', inicio: fmtVT(c.inicio), fin: fmtVT(c.fin) });
+        if (!ans) return;
+        const ini = parseVT(ans.inicio), fin = parseVT(ans.fin);
+        if (ini == null || fin == null || fin <= ini) { alert('Revisa el inicio y el fin (mm:ss); el fin tiene que ser después del inicio.'); return; }
+        updateVideo((x) => Object.assign(x.clips.find((y) => y.id === c.id), { nombre: ans.nombre.trim(), tema: (ans.tema || '').trim(), inicio: ini, fin }));
+      };
+      row.querySelector('.va-c-del').onclick = () => {
+        if (!confirm(`¿Borrar el clip «${c.nombre}»?`)) return;
+        updateVideo((x) => (x.clips = x.clips.filter((y) => y.id !== c.id)));
+      };
+      return row;
+    })];
+  }));
+}
+
+// ---------- 3) Dibujar sobre el vídeo ----------
+// Elementos: {t: 'arrow'|'line'|'circle'|'pen', c: color, x1,y1,x2,y2 | pts:[[x,y]…]} en coordenadas 0–1 del fotograma.
+
+// Ajusta la capa de dibujo al rectángulo real de la imagen (el vídeo puede tener bandas negras)
+function layoutOverlay() {
+  const video = vid(), svg = $('vaOverlay');
+  if (!video.videoWidth) return;
+  const W = video.clientWidth, H = video.clientHeight;
+  const ar = video.videoWidth / video.videoHeight;
+  let w = W, h = W / ar;
+  if (h > H) { h = H; w = H * ar; }
+  Object.assign(svg.style, { left: `${(W - w) / 2}px`, top: `${(H - h) / 2}px`, width: `${w}px`, height: `${h}px` });
+  svg.setAttribute('viewBox', `0 0 1000 ${Math.round(1000 / ar)}`);
+}
+
+function overlayMarkup(items, ar) {
+  const H = 1000 / ar;
+  const P = (x, y) => `${(x * 1000).toFixed(1)},${(y * H).toFixed(1)}`;
+  // una punta de flecha por color
+  const markers = DRAW_COLORS.map((c, i) =>
+    `<marker id="vah${i}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${c}" stroke="rgba(0,0,0,.55)" stroke-width="1"/></marker>`).join('');
+  return `<defs>${markers}</defs>` +
+    items.map((it) => {
+      const st = `stroke="${it.c}" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"`;
+      const shadow = `stroke="rgba(0,0,0,.55)" stroke-width="11" fill="none" stroke-linecap="round" stroke-linejoin="round"`;
+      let d;
+      if (it.t === 'pen') d = 'M' + it.pts.map(([x, y]) => P(x, y)).join(' L');
+      else if (it.t === 'circle') {
+        const cx = (it.x1 + it.x2) / 2 * 1000, cy = (it.y1 + it.y2) / 2 * H, rx = Math.abs(it.x2 - it.x1) / 2 * 1000, ry = Math.abs(it.y2 - it.y1) / 2 * H;
+        return `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" ${shadow}/><ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" ${st}/>`;
+      } else d = `M${P(it.x1, it.y1)} L${P(it.x2, it.y2)}`;
+      const marker = it.t === 'arrow' ? ` marker-end="url(#vah${Math.max(0, DRAW_COLORS.indexOf(it.c))})"` : '';
+      return `<path d="${d}" ${shadow}/><path d="${d}" ${st}${marker}/>`;
+    }).join('');
+}
+
+function showOverlay(dibujo) {
+  const video = vid(), svg = $('vaOverlay');
+  layoutOverlay();
+  svg.innerHTML = dibujo ? overlayMarkup(dibujo.items, video.videoWidth / video.videoHeight || 16 / 9) : '';
+  svg.classList.toggle('visible', !!dibujo);
+}
+
+function startDrawing() {
+  const v = curVideo();
+  if (!loadedFiles[v.id]) { alert('Primero elige el archivo de vídeo.'); return; }
+  vid().pause();
+  vaPlaylist = null;
+  vaDrawing = { t: vid().currentTime, items: [], tool: 'arrow', color: DRAW_COLORS[0], undo: [], cur: null };
+  drawToolbar();
+  const svg = $('vaOverlay');
+  svg.classList.add('editing', 'visible');
+  layoutOverlay();
+  redrawOverlayEdit();
+  const pt = (ev) => {
+    const r = svg.getBoundingClientRect();
+    return [Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height))];
+  };
+  svg.onpointerdown = (ev) => {
+    if (!vaDrawing) return;
+    ev.preventDefault();
+    try { svg.setPointerCapture(ev.pointerId); } catch {}
+    const [x, y] = pt(ev);
+    const d = vaDrawing;
+    d.cur = d.tool === 'pen' ? { t: 'pen', c: d.color, pts: [[x, y]] } : { t: d.tool, c: d.color, x1: x, y1: y, x2: x, y2: y };
+    redrawOverlayEdit();
+  };
+  svg.onpointermove = (ev) => {
+    const d = vaDrawing;
+    if (!d || !d.cur) return;
+    const [x, y] = pt(ev);
+    if (d.cur.t === 'pen') d.cur.pts.push([x, y]); else { d.cur.x2 = x; d.cur.y2 = y; }
+    redrawOverlayEdit();
+  };
+  svg.onpointerup = svg.onpointercancel = () => {
+    const d = vaDrawing;
+    if (!d || !d.cur) return;
+    const c = d.cur;
+    const big = c.t === 'pen' ? c.pts.length > 2 : Math.hypot(c.x2 - c.x1, c.y2 - c.y1) > 0.02;
+    if (big) { d.undo.push(JSON.stringify(d.items)); d.items.push(c); }
+    d.cur = null;
+    redrawOverlayEdit();
+  };
+}
+
+function redrawOverlayEdit() {
+  const d = vaDrawing, video = vid();
+  $('vaOverlay').innerHTML = overlayMarkup([...d.items, ...(d.cur ? [d.cur] : [])], video.videoWidth / video.videoHeight || 16 / 9);
+}
+
+function drawToolbar() {
+  const d = vaDrawing, bar = $('vaDrawBar');
+  bar.hidden = false;
+  const tools = [['arrow', '➜', 'Flecha'], ['line', '／', 'Línea'], ['circle', '◯', 'Círculo'], ['pen', '✎', 'Lápiz']];
+  bar.replaceChildren(
+    Object.assign(document.createElement('span'), { className: 'va-draw-t', textContent: `Dibujo en ${fmtVT(d.t)}` }),
+    ...tools.map(([k, icon, label]) => {
+      const b = document.createElement('button');
+      b.className = 'tool' + (d.tool === k ? ' active' : '');
+      b.innerHTML = `<span class="tool-icon">${icon}</span><span class="tool-label">${label}</span>`;
+      b.onclick = () => { d.tool = k; drawToolbar(); };
+      return b;
+    }),
+    ...DRAW_COLORS.map((c) => {
+      const b = document.createElement('button');
+      b.className = 'va-color' + (d.color === c ? ' active' : '');
+      b.style.background = c;
+      b.title = 'Color';
+      b.onclick = () => { d.color = c; drawToolbar(); };
+      return b;
+    }),
+    Object.assign(document.createElement('button'), { className: 'tool', innerHTML: '<span class="tool-icon">↶</span><span class="tool-label">Deshacer</span>',
+      onclick: () => { if (d.undo.length) { d.items = JSON.parse(d.undo.pop()); redrawOverlayEdit(); } } }),
+    Object.assign(document.createElement('button'), { className: 'ghost', textContent: 'Cancelar', onclick: () => endDrawing(false) }),
+    Object.assign(document.createElement('button'), { className: 'primary', textContent: 'Guardar dibujo', onclick: () => endDrawing(true) }),
+  );
+}
+
+function endDrawing(saveIt) {
+  const d = vaDrawing;
+  vaDrawing = null;
+  $('vaDrawBar').hidden = true;
+  const svg = $('vaOverlay');
+  svg.classList.remove('editing');
+  svg.onpointerdown = svg.onpointermove = svg.onpointerup = svg.onpointercancel = null;
+  if (saveIt && d && d.items.length) {
+    updateVideo((x) => {
+      x.marcas.push({ id: uid(), t: d.t, tipo: 'dibujo', dibujo: { items: d.items } });
+      x.marcas.sort((a, b) => a.t - b.t);
+    });
+    showOverlay({ items: d.items });
+    toast(`Dibujo guardado en ${fmtVT(d.t)}`);
+  } else showOverlay(null);
+}
+
+// ---------- Reproducción: tiempo, listas de tramos y paradas en los dibujos ----------
+
+function vaTick() {
+  const v = curVideo();
+  if (!v) return;
+  if (isFileSource(v)) {
+    const video = vid();
+    $('vaTime').textContent = `${fmtVT(video.currentTime)} / ${fmtVT(video.duration || 0)}`;
+    $('vaPlay').textContent = video.paused ? '▶' : '❚❚';
+    if (video.duration && document.activeElement !== $('vaSeek')) $('vaSeek').value = Math.round((video.currentTime / video.duration) * 1000);
+  } else {
+    $('vaClockTime').textContent = fmtVT(vaNow());
+    $('vaClockPlay').textContent = vaClock.running ? '❚❚' : '▶';
+  }
+}
+
+function onTimeUpdate() {
+  const video = vid(), t = video.currentTime, v = curVideo();
+  if (!v) return;
+  // lista de tramos
+  if (vaPlaylist && !video.paused) {
+    const [, end] = vaPlaylist.segs[vaPlaylist.i];
+    if (t >= end) {
+      vaPlaylist.i++;
+      if (vaPlaylist.i >= vaPlaylist.segs.length) {
+        if (vaPlaylist.loop) vaPlaylist.i = 0; else { vaPlaylist = null; video.pause(); }
+      }
+      if (vaPlaylist) video.currentTime = vaPlaylist.segs[vaPlaylist.i][0];
+    }
+  }
+  // parar en los dibujos
+  if (!video.paused && $('vaAutoPause').checked && !vaDrawing) {
+    const m = v.marcas.find((x) => x.dibujo && x.t > vaLastTime && x.t <= t && t - x.t < 1);
+    if (m) {
+      video.pause();
+      video.currentTime = m.t;
+      showOverlay(m.dibujo);
+      clearTimeout(vaHold);
+      vaHold = setTimeout(() => { if (curVideo() && vid().paused && !vaDrawing) { showOverlay(null); vid().play(); } }, DRAW_HOLD * 1000);
+    }
+  }
+  // mostrar el dibujo si está parado justo en él
+  if (video.paused && !vaDrawing && !vaHold) {
+    const m = v.marcas.find((x) => x.dibujo && Math.abs(x.t - t) < 0.25);
+    showOverlay(m ? m.dibujo : null);
+  }
+  vaLastTime = t;
+  vaTick();
+}
+
+function pauseAnalysisVideo() {
+  try { vid().pause(); } catch {}
+  vaPlaylist = null;
+  if (vaDrawing) endDrawing(false);
+}
+
+// ---------- Descargar un clip como vídeo (con sus dibujos) ----------
+
+function clipVideoFormat() {
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) return null;
+  const options = [
+    ['video/mp4;codecs=avc1,mp4a.40.2', 'mp4'], ['video/mp4;codecs=avc1', 'mp4'], ['video/mp4', 'mp4'],
+    ['video/webm;codecs=vp9,opus', 'webm'], ['video/webm;codecs=vp8,opus', 'webm'], ['video/webm', 'webm'],
+  ];
+  const ok = options.find(([type]) => MediaRecorder.isTypeSupported(type));
+  return ok ? { type: ok[0], ext: ok[1] } : null;
+}
+
+let vaAudio = null; // el audio del vídeo pasa por aquí para poder grabarlo
+// Devuelve el sonido del vídeo para grabarlo, o null si el navegador no lo tiene activo
+// (si se grabara una pista de sonido vacía, el archivo saldría con la duración mal).
+async function audioStream() {
+  try {
+    if (!vaAudio) {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = ctx.createMediaElementSource(vid());
+      const dest = ctx.createMediaStreamDestination();
+      src.connect(ctx.destination);
+      src.connect(dest);
+      vaAudio = { ctx, dest };
+    }
+    await Promise.race([vaAudio.ctx.resume(), new Promise((r) => setTimeout(r, 500))]);
+    return vaAudio.ctx.state === 'running' ? vaAudio.dest.stream : null;
+  } catch { return null; }
+}
+
+function seekTo(t) {
+  return new Promise((resolve) => {
+    const video = vid();
+    const done = () => { video.removeEventListener('seeked', done); resolve(); };
+    video.addEventListener('seeked', done);
+    video.currentTime = t;
+    setTimeout(done, 3000);
+  });
+}
+
+async function downloadClip(clip, button) {
+  const fmt = clipVideoFormat();
+  if (!fmt) { alert('Este navegador no permite grabar vídeo. Prueba con Chrome, Edge o un iPhone/iPad actualizado.'); return; }
+  const v = curVideo(), video = vid();
+  const label = button.textContent;
+  button.disabled = true;
+  pauseAnalysisVideo();
+  const autoPause = $('vaAutoPause').checked;
+  $('vaAutoPause').checked = false; // aquí las paradas en los dibujos las hace la grabación
+  $('vaRec').hidden = false;
+  try {
+    const scale = Math.min(1, 1280 / video.videoWidth);
+    const W = Math.round(video.videoWidth * scale / 2) * 2, H = Math.round(video.videoHeight * scale / 2) * 2;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    const draws = v.marcas.filter((m) => m.dibujo && m.t >= clip.inicio && m.t <= clip.fin).sort((a, b) => a.t - b.t);
+    const images = {};
+    for (const m of draws) {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 1000 ${Math.round(1000 * H / W)}">${overlayMarkup(m.dibujo.items, W / H)}</svg>`;
+      images[m.id] = await new Promise((res) => { const img = new Image(); img.onload = () => res(img); img.onerror = () => res(null); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
+    }
+    let overlay = null;
+    const paint = () => {
+      ctx.drawImage(video, 0, 0, W, H);
+      if (overlay) ctx.drawImage(overlay, 0, 0, W, H);
+    };
+
+    await seekTo(clip.inicio);
+    paint();
+    const stream = canvas.captureStream(30);
+    const audio = await audioStream();
+    if (audio) audio.getAudioTracks().forEach((tr) => stream.addTrack(tr));
+    // sin sonido, se graba solo imagen (formato sin pista de audio)
+    const mime = audio ? fmt.type : (videoFormat() || fmt).type;
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5000000 });
+    const chunks = [];
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    const finished = new Promise((r) => (rec.onstop = r));
+    rec.start(250);
+    await video.play();
+    let next = 0;
+    // se graba en tiempo real; en cada dibujo, el vídeo se para DRAW_HOLD segundos
+    for (;;) {
+      if (video.currentTime >= clip.fin || video.ended) break;
+      if (next < draws.length && video.currentTime >= draws[next].t) {
+        video.pause();
+        overlay = images[draws[next].id];
+        const until = performance.now() + DRAW_HOLD * 1000;
+        while (performance.now() < until) {
+          paint();
+          button.textContent = 'Grabando…';
+          await new Promise((r) => requestAnimationFrame(r));
+        }
+        overlay = null;
+        next++;
+        await video.play();
+      }
+      paint();
+      button.textContent = `Grabando ${Math.round(((video.currentTime - clip.inicio) / (clip.fin - clip.inicio)) * 100)}%`;
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    video.pause();
+    rec.stop();
+    await finished;
+    stream.getVideoTracks().forEach((tr) => tr.stop());
+    const safe = (clip.nombre || 'clip').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+    const file = new File(chunks, `clip-${safe || 'telecable'}.${fmt.ext}`, { type: fmt.type.split(';')[0] });
+    await shareOrDownload(file);
+    toast('Clip listo');
+  } catch (err) {
+    alert('No se ha podido crear el clip: ' + (err && err.message ? err.message : err));
+  } finally {
+    $('vaRec').hidden = true;
+    $('vaAutoPause').checked = autoPause;
+    button.disabled = false;
+    button.textContent = label;
+  }
+}
+
+// ---------- Archivo de vídeo ----------
+
+function rememberFile(v) {
+  const f = loadedFiles[v.id];
+  if (f) updateVideo((x) => (x.archivo = { nombre: f.name, tam: f.size }));
+}
+
+function onFileChosen(file) {
+  const v = curVideo();
+  if (!v || !file) return;
+  if (v.archivo && (v.archivo.nombre !== file.name || v.archivo.tam !== file.size) &&
+      !confirm(`Este análisis se hizo con «${v.archivo.nombre}». ¿Usar «${file.name}» de todas formas? Las marcas podrían no coincidir.`)) return;
+  if (loadedFiles[v.id]) URL.revokeObjectURL(loadedFiles[v.id].url);
+  loadedFiles[v.id] = { url: URL.createObjectURL(file), name: file.name, size: file.size };
+  if (!v.archivo || v.archivo.nombre !== file.name || v.archivo.tam !== file.size) rememberFile(v); else renderAnalysis();
+}
+
+// ---------- Conexión con la interfaz (se llama al final de app.js) ----------
+
+function initVideo() {
+  $('vNew').onclick = () => openVideoDialog();
+  $('vaFile').onchange = (ev) => { const f = ev.target.files[0]; ev.target.value = ''; onFileChosen(f); };
+  const video = vid();
+  video.addEventListener('timeupdate', onTimeUpdate);
+  video.addEventListener('play', () => { clearTimeout(vaHold); vaHold = null; if (!vaDrawing) showOverlay(null); vaTick(); });
+  video.addEventListener('pause', vaTick);
+  video.addEventListener('loadedmetadata', () => { layoutOverlay(); vaTick(); });
+  video.addEventListener('seeked', () => { vaLastTime = video.currentTime - 0.01; onTimeUpdate(); });
+  window.addEventListener('resize', layoutOverlay);
+  video.onclick = () => { if (!vaDrawing) (video.paused ? video.play() : video.pause()); };
+  $('vaPlay').onclick = () => (video.paused ? video.play() : video.pause());
+  $('vaBack5').onclick = () => { video.currentTime = Math.max(0, video.currentTime - 5); };
+  $('vaFwd5').onclick = () => { video.currentTime = Math.min(video.duration || 0, video.currentTime + 5); };
+  $('vaSpeed').onchange = () => { video.playbackRate = +$('vaSpeed').value; };
+  $('vaSeek').oninput = () => { if (video.duration) video.currentTime = ($('vaSeek').value / 1000) * video.duration; };
+  $('vaDraw').onclick = startDrawing;
+  $('vaClip').onclick = startClip;
+  $('vaTabMarks').onclick = () => { vaTab = 'marks'; renderAnalysis(); };
+  $('vaTabClips').onclick = () => { vaTab = 'clips'; renderAnalysis(); };
+  // Cronómetro para OK Liga TV
+  $('vaClockPlay').onclick = () => {
+    vaClock = vaClock.running ? { running: false, base: vaNow(), since: 0 } : { running: true, base: vaClock.base, since: performance.now() };
+    vaTick();
+  };
+  $('vaClockBack').onclick = () => { vaClock.base = Math.max(0, vaClock.base - 5); vaTick(); };
+  $('vaClockFwd').onclick = () => { vaClock.base += 5; vaTick(); };
+  $('vaClockSet').onclick = async () => {
+    const ans = await ask('Tiempo del vídeo', [{ key: 't', type: 'num', label: 'Escribe el tiempo que marca OK Liga TV (mm:ss o h:mm:ss)', required: true, placeholder: '12:30' }], { t: fmtVT(vaNow()) });
+    const t = ans && parseVT(ans.t);
+    if (t == null) { if (ans) alert('Escribe el tiempo como 12:30 o 1:05:20.'); return; }
+    vaClock = { running: vaClock.running, base: t, since: performance.now() };
+    vaTick();
+  };
+  setInterval(() => { if (route === 'analisis') vaTick(); }, 250);
+}

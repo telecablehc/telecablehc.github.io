@@ -101,14 +101,100 @@
       <div id="libList"></div>
     </section>
 
-    <!-- ===== Análisis de vídeo (en preparación) ===== -->
+    <!-- ===== Análisis de vídeo: lista ===== -->
     <section id="screen-video" class="screen" hidden>
-      <div class="empty-screen">
-        <div class="empty-icon">🎥</div>
-        <h2>Análisis - Vídeo</h2>
-        <p class="hint">Esta sección está en preparación.</p>
-      </div>
+      <button id="vNew" class="menu-btn primary-card">
+        <span class="menu-btn-title">＋ Nuevo análisis</span>
+        <span class="menu-btn-sub">Con un archivo de vídeo o un partido de OK Liga TV</span>
+      </button>
+      <h2>Análisis guardados</h2>
+      <div id="vList" class="fixtures"></div>
     </section>
+
+    <!-- ===== Análisis de un vídeo ===== -->
+    <section id="screen-analisis" class="screen" hidden>
+      <div id="vaHead" class="va-head"></div>
+
+      <!-- Archivo de vídeo -->
+      <div id="vaFileBox">
+        <div id="vaPickFile" class="va-pick">
+          <p id="vaPickText" class="hint"></p>
+          <label class="primary file-btn">Elegir archivo de vídeo<input type="file" id="vaFile" accept="video/*" hidden></label>
+        </div>
+        <div id="vaStage" class="va-stage" hidden>
+          <video id="vaVideo" playsinline preload="metadata"></video>
+          <svg id="vaOverlay" class="va-overlay" xmlns="http://www.w3.org/2000/svg"></svg>
+          <div id="vaRec" class="va-rec" hidden>● Grabando clip…</div>
+        </div>
+        <div id="vaControls" class="va-controls" hidden>
+          <button id="vaBack5" class="ghost">⏪ 5s</button>
+          <button id="vaPlay" class="primary va-play">▶</button>
+          <button id="vaFwd5" class="ghost">5s ⏩</button>
+          <span id="vaTime" class="va-time">00:00 / 00:00</span>
+          <select id="vaSpeed" class="ghost">
+            <option value="0.25">0,25×</option><option value="0.5">0,5×</option>
+            <option value="1" selected>1×</option><option value="1.5">1,5×</option><option value="2">2×</option>
+          </select>
+          <input id="vaSeek" type="range" min="0" max="1000" value="0">
+        </div>
+      </div>
+
+      <!-- OK Liga TV: enlace + cronómetro sincronizado -->
+      <div id="vaTvBox" class="va-tv" hidden>
+        <a id="vaTvLink" class="primary file-btn" target="_blank" rel="noopener">Abrir el partido en OK Liga TV ↗</a>
+        <p class="hint">Pulsa ▶ en el cronómetro a la vez que en OK Liga TV. Las acciones se guardan con este tiempo.</p>
+        <div class="va-clock">
+          <button id="vaClockPlay" class="primary va-play">▶</button>
+          <span id="vaClockTime" class="va-clock-time">00:00</span>
+          <button id="vaClockBack" class="ghost">−5s</button>
+          <button id="vaClockFwd" class="ghost">+5s</button>
+          <button id="vaClockSet" class="ghost">Poner tiempo…</button>
+        </div>
+      </div>
+
+      <!-- Herramientas -->
+      <div class="va-tools">
+        <button id="vaDraw" class="ghost">✏️ Dibujar</button>
+        <button id="vaClip" class="ghost">✂️ Crear clip</button>
+        <label class="check va-auto"><input type="checkbox" id="vaAutoPause" checked> Pararse en los dibujos</label>
+      </div>
+      <div id="vaClipBar" class="banner info" hidden></div>
+      <div id="vaDrawBar" class="va-drawbar" hidden></div>
+
+      <h2>Marcar acción</h2>
+      <div id="vaTags" class="va-tags"></div>
+
+      <div class="seg wide va-tabs">
+        <button id="vaTabMarks" class="active">Acciones</button>
+        <button id="vaTabClips">Clips</button>
+      </div>
+      <div id="vaFilters" class="chips-filter"></div>
+      <div id="vaList"></div>
+    </section>
+
+    <!-- Datos de un análisis -->
+    <dialog id="dlgVideo">
+      <h3 id="dvTitle">Nuevo análisis</h3>
+      <div class="form">
+        <label class="wide">Título <input id="dvTitulo" type="text" placeholder="Ej.: J3 Telecable – CH Mataró"></label>
+        <label>Fecha <input id="dvFecha" type="date"></label>
+        <label>Partido <select id="dvPartido"></select></label>
+      </div>
+      <div class="ask-label">¿De dónde es el vídeo?</div>
+      <div class="seg wide" id="dvFuente">
+        <button type="button" data-f="archivo">Archivo (tablet / ordenador)</button>
+        <button type="button" data-f="okliga">OK Liga TV</button>
+      </div>
+      <label class="field-col" id="dvUrlWrap">Enlace del partido en OK Liga TV
+        <input id="dvUrl" type="url" placeholder="https://www.okliga.tv/…">
+      </label>
+      <div class="dlg-actions">
+        <button type="button" id="dvDelete" class="ghost danger">Borrar análisis</button>
+        <span class="spacer"></span>
+        <button type="button" id="dvCancel" class="ghost">Cancelar</button>
+        <button type="button" id="dvOk" class="primary">Guardar</button>
+      </div>
+    </dialog>
 
     <!-- ===== Totales ===== -->
     <section id="screen-totales" class="screen" hidden>
@@ -371,6 +457,7 @@
   <script src="cloud.js"></script>
   <script src="calendar.js"></script>
   <script src="entrenos.js"></script>
+  <script src="video.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

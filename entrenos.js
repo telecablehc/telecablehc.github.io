@@ -152,7 +152,7 @@ function exerciseCard(ex, n, timeText) {
   card.querySelector('.ex-desc').textContent = ex.descripcion || '';
   // dibujo: con movimientos se reproduce como vídeo (▶), sin movimientos es una imagen
   const thumb = card.querySelector('.draw-thumb');
-  if (thumb) mountDrawing(thumb, ex.dibujo);
+  if (thumb) mountDrawing(thumb, ex.dibujo, () => ex.nombre);
   if (hasMoves(ex.dibujo)) {
     const tag = document.createElement('span');
     tag.className = 'video-tag';
@@ -352,7 +352,7 @@ function openExerciseEditor(original, opts, onSave) {
   };
   const drawThumb = () => {
     $('exThumb').classList.remove('video', 'playing');
-    if (ex.dibujo.items.length) mountDrawing($('exThumb'), ex.dibujo);
+    if (ex.dibujo.items.length) mountDrawing($('exThumb'), ex.dibujo, () => $('exNombre').value.trim());
     else $('exThumb').innerHTML = '<p class="hint">Sin dibujo</p>';
     $('exDraw').textContent = ex.dibujo.items.length ? '✏️ Editar dibujo' : '✏️ Dibujar en la pista';
   };
@@ -556,8 +556,9 @@ function positionsAt(items, timeline, t) {
   return { pos, step };
 }
 
-// Reproductor: dibujo con botón ▶; se repite en bucle mientras está a la vista
-function mountDrawing(container, dibujo) {
+// Reproductor: dibujo con botón ▶; se repite en bucle mientras está a la vista.
+// getName: nombre del ejercicio (para el título y el nombre del archivo al descargar)
+function mountDrawing(container, dibujo, getName = () => '') {
   container.innerHTML = drawingSvg(dibujo);
   if (!hasMoves(dibujo)) return;
   const items = dibujo.items;
@@ -598,6 +599,138 @@ function mountDrawing(container, dibujo) {
   };
   btn.onclick = toggle;
   container.onclick = toggle;
+
+  // ⬇ descargar como archivo de vídeo
+  const dl = document.createElement('button');
+  dl.type = 'button';
+  dl.className = 'video-dl';
+  dl.title = 'Descargar el vídeo';
+  dl.textContent = '⬇ Vídeo';
+  dl.onclick = (ev) => {
+    ev.stopPropagation();
+    if (raf) stop();
+    downloadExerciseVideo(dibujo, getName(), dl);
+  };
+  container.append(dl);
+}
+
+// ---------- Descargar el ejercicio como vídeo (MP4 si el navegador puede, si no WebM) ----------
+
+const VIDEO_W = 1280, VIDEO_H = 790, VIDEO_HEAD = 120; // cabecera con escudo y nombre
+const SVG_INLINE_STYLE = '<style>.rk-floor{fill:#dcebf5;stroke:#3a4a58;stroke-width:.18}' +
+  '.rk-line{stroke:#2c5b8a;stroke-width:.1}.rk-dot{fill:#2c5b8a}.rk-goal{fill:#fff;stroke:#111;stroke-width:.12}' +
+  'text{font-family:Arial,Helvetica,sans-serif}</style>';
+
+function videoFormat() {
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) return null;
+  const options = [
+    ['video/mp4;codecs=avc1', 'mp4'], ['video/mp4', 'mp4'],
+    ['video/webm;codecs=vp9', 'webm'], ['video/webm;codecs=vp8', 'webm'], ['video/webm', 'webm'],
+  ];
+  const ok = options.find(([type]) => MediaRecorder.isTypeSupported(type));
+  return ok ? { type: ok[0], ext: ok[1] } : null;
+}
+
+// Convierte el SVG de un fotograma en imagen (con los estilos dentro, porque una imagen no ve la hoja CSS)
+function svgToImage(svgMarkup) {
+  const svg = svgMarkup
+    .replace('<svg ', `<svg width="${VIDEO_W}" height="${VIDEO_H - VIDEO_HEAD}" `)
+    .replace('<defs>', SVG_INLINE_STYLE + '<defs>');
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  });
+}
+
+function loadImage(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+async function downloadExerciseVideo(dibujo, nombre, button) {
+  const fmt = videoFormat();
+  if (!fmt) {
+    alert('Este navegador no permite grabar vídeo. Prueba con Chrome, Edge o un iPhone/iPad actualizado.');
+    return;
+  }
+  const label = button.textContent;
+  button.disabled = true;
+  try {
+    const items = dibujo.items;
+    const timeline = buildTimeline(items);
+    const duration = timeline.total + 0.6; // una vuelta completa y un momento quieto al final
+    const canvas = document.createElement('canvas');
+    canvas.width = VIDEO_W; canvas.height = VIDEO_H;
+    const ctx = canvas.getContext('2d');
+    const crest = await loadImage('crest.png');
+    const title = nombre || 'Ejercicio';
+    const drawHead = () => {
+      ctx.fillStyle = '#0f3d5e';
+      ctx.fillRect(0, 0, VIDEO_W, VIDEO_HEAD);
+      if (crest) ctx.drawImage(crest, 24, 14, (VIDEO_HEAD - 28) * crest.width / crest.height, VIDEO_HEAD - 28);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 44px Arial, Helvetica, sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(title.length > 40 ? title.slice(0, 39) + '…' : title, 130, VIDEO_HEAD / 2 - 12);
+      ctx.font = '26px Arial, Helvetica, sans-serif';
+      ctx.fillStyle = '#cfe0ee';
+      ctx.fillText('Telecable HC', 130, VIDEO_HEAD / 2 + 28);
+    };
+    const drawFrame = async (t) => {
+      const { pos, step } = positionsAt(items, timeline, Math.min(t, timeline.total));
+      const img = await svgToImage(drawingSvg(dibujo, null, { pos, step, badges: maxStep(items) > 1 }));
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, VIDEO_HEAD, VIDEO_W, VIDEO_H - VIDEO_HEAD);
+      ctx.drawImage(img, 0, VIDEO_HEAD, VIDEO_W, VIDEO_H - VIDEO_HEAD);
+      drawHead();
+    };
+
+    await drawFrame(0);
+    const stream = canvas.captureStream(30);
+    const rec = new MediaRecorder(stream, { mimeType: fmt.type, videoBitsPerSecond: 4000000 });
+    const chunks = [];
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    const finished = new Promise((resolve) => (rec.onstop = resolve));
+    rec.start(250);
+    // se graba en tiempo real: cada fotograma corresponde al segundo de la animación
+    const start = performance.now();
+    for (;;) {
+      const t = (performance.now() - start) / 1000;
+      if (t >= duration) break;
+      await drawFrame(t);
+      button.textContent = `Grabando ${Math.round((t / duration) * 100)}%`;
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    rec.stop();
+    await finished;
+    stream.getTracks().forEach((tr) => tr.stop());
+
+    const safe = title.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+    const file = new File(chunks, `ejercicio-${safe || 'telecable'}.${fmt.ext}`, { type: fmt.type.split(';')[0] });
+    await shareOrDownload(file);
+    toast('Vídeo listo');
+  } catch (err) {
+    alert('No se ha podido crear el vídeo: ' + (err && err.message ? err.message : err));
+  } finally {
+    button.disabled = false;
+    button.textContent = label;
+  }
+}
+
+// En móvil/tablet: menú Compartir (WhatsApp, Drive, Fotos…). En ordenador: descarga.
+async function shareOrDownload(file) {
+  const touch = matchMedia('(pointer: coarse)').matches;
+  if (touch && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: file.name }); return; }
+    catch (err) { if (err.name === 'AbortError') return; }
+  }
+  downloadFile(file);
 }
 
 function openDrawEditor(dibujo, onDone) {

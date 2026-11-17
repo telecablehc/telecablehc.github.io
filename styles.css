@@ -464,3 +464,22 @@ dialog.draw-dialog { width: min(1100px, calc(100vw - 12px)); max-height: 96vh; p
   #printArea .draw-thumb { flex-basis: 300px; }
   #printArea .tipo { color: #000; background: none; border: 1px solid #999; }
 }
+
+/* Ejercicios con movimiento: "vídeo" */
+.draw-thumb { position: relative; }
+.draw-thumb.video { cursor: pointer; }
+.video-btn {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 52px; height: 52px; border-radius: 50%; border: 0; font-size: 20px;
+  background: rgba(0, 0, 0, .6); color: #fff; display: flex; align-items: center; justify-content: center;
+}
+.draw-thumb.playing .video-btn { left: auto; top: auto; right: 6px; bottom: 8px; transform: none; width: 34px; height: 34px; font-size: 13px; }
+.video-bar { position: absolute; left: 0; bottom: 0; height: 4px; width: 0; background: var(--warn); }
+.video-tag { font-size: 12px; font-weight: 700; color: var(--brand); white-space: nowrap; }
+.tool-step { cursor: default; }
+.step-ctl { display: flex; align-items: center; gap: 4px; }
+.step-ctl button { width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); padding: 0; font-weight: 700; }
+.step-ctl b { min-width: 16px; text-align: center; font-size: 16px; }
+.tool-play .tool-icon { color: var(--on); }
+.tool-play.active .tool-icon { color: #fff; }
+@media print { .video-btn, .video-bar { display: none; } }

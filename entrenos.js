@@ -143,13 +143,22 @@ function exerciseCard(ex, n, timeText) {
       <span class="ex-dur"></span>
     </div>
     <div class="ex-body">
-      ${(ex.dibujo && ex.dibujo.items.length) ? `<div class="draw-thumb">${drawingSvg(ex.dibujo)}</div>` : ''}
+      ${(ex.dibujo && ex.dibujo.items.length) ? '<div class="draw-thumb"></div>' : ''}
       <p class="ex-desc"></p>
     </div>`;
   card.querySelector('.ex-name').textContent = ex.nombre || 'Ejercicio sin nombre';
   card.querySelector('.tipo').textContent = tipoLabel(ex.tipo);
   card.querySelector('.ex-dur').textContent = `${ex.duracion || 0} min${timeText ? ' · ' + timeText : ''}`;
   card.querySelector('.ex-desc').textContent = ex.descripcion || '';
+  // dibujo: con movimientos se reproduce como vídeo (▶), sin movimientos es una imagen
+  const thumb = card.querySelector('.draw-thumb');
+  if (thumb) mountDrawing(thumb, ex.dibujo);
+  if (hasMoves(ex.dibujo)) {
+    const tag = document.createElement('span');
+    tag.className = 'video-tag';
+    tag.textContent = '🎬 Vídeo';
+    card.querySelector('.ex-head').insertBefore(tag, card.querySelector('.ex-dur'));
+  }
   return card;
 }
 
@@ -342,7 +351,9 @@ function openExerciseEditor(original, opts, onSave) {
     }));
   };
   const drawThumb = () => {
-    $('exThumb').innerHTML = ex.dibujo.items.length ? drawingSvg(ex.dibujo) : '<p class="hint">Sin dibujo</p>';
+    $('exThumb').classList.remove('video', 'playing');
+    if (ex.dibujo.items.length) mountDrawing($('exThumb'), ex.dibujo);
+    else $('exThumb').innerHTML = '<p class="hint">Sin dibujo</p>';
     $('exDraw').textContent = ex.dibujo.items.length ? '✏️ Editar dibujo' : '✏️ Dibujar en la pista';
   };
   drawTipo();
@@ -361,7 +372,8 @@ function openExerciseEditor(original, opts, onSave) {
 }
 
 // ---------- Dibujo en la pista ----------
-// Pista de 40 x 20 m. Elementos: {t, x, y, (x2, y2), n}; coordenadas relativas 0–1.
+// Pista de 40 x 20 m. Elementos: {t, x, y, (x2, y2), n, p}; coordenadas relativas 0–1.
+// p = paso de la flecha (orden de los movimientos en la animación).
 
 const DRAW_TOOLS = [
   ['mover', '✋', 'Mover'],
@@ -374,12 +386,14 @@ const DRAW_TOOLS = [
   ['pass', '⇢', 'Pase'],
   ['drive', '〰', 'Conducción'],
   ['shot', '⇒', 'Tiro'],
+  ['setp', '#', 'Poner paso'],
   ['erase', '✕', 'Borrar'],
 ];
 const ARROWS = ['run', 'pass', 'drive', 'shot'];
 const DRAW_HINTS = {
   mover: 'Arrastra un elemento para moverlo (en las flechas, arrastra un extremo para cambiarlo).',
   erase: 'Toca un elemento para borrarlo.',
+  setp: 'Toca una flecha para ponerle el paso elegido arriba.',
 };
 
 let svgSeq = 0;
@@ -417,9 +431,14 @@ function wavePath(x1, y1, x2, y2) {
   return d + ` L${x2},${y2}`;
 }
 
-function itemMarkup(it, id, idx) {
-  const X = it.x * 40, Y = it.y * 20;
-  const g = (inner) => `<g data-i="${idx}">${inner}</g>`;
+// opts.pos: posición animada de las fichas (idx → {x, y}); opts.step: paso que se está animando;
+// opts.badges: mostrar el número de paso en cada flecha
+function itemMarkup(it, id, idx, opts = {}) {
+  const at = (opts.pos && opts.pos[idx]) || it;
+  const X = at.x * 40, Y = at.y * 20;
+  const isArrow = ARROWS.includes(it.t);
+  const faded = isArrow && opts.step != null && stepOf(it) !== opts.step;
+  const g = (inner) => `<g data-i="${idx}"${faded ? ' opacity="0.25"' : ''}>${inner}</g>`;
   const label = (txt, fill) => `<text x="${X}" y="${Y + 0.3}" font-size="0.8" text-anchor="middle" font-weight="700" fill="${fill}">${escapeHtml(txt || '')}</text>`;
   switch (it.t) {
     case 'own': return g(`<circle cx="${X}" cy="${Y}" r="0.75" fill="#d0102a" stroke="#fff" stroke-width="0.12"/>${label(it.n, '#fff')}`);
@@ -432,20 +451,153 @@ function itemMarkup(it, id, idx) {
       const d = it.t === 'drive' ? wavePath(X, Y, X2, Y2) : `M${X},${Y} L${X2},${Y2}`;
       const dash = it.t === 'pass' ? ' stroke-dasharray="0.5 0.35"' : '';
       const width = it.t === 'shot' ? 0.24 : 0.14;
+      // número de paso junto a la mitad de la flecha
+      const badge = opts.badges
+        ? `<circle cx="${(X + X2) / 2}" cy="${(Y + Y2) / 2 - 0.7}" r="0.5" fill="#fff" stroke="#111" stroke-width="0.06"/>
+           <text x="${(X + X2) / 2}" y="${(Y + Y2) / 2 - 0.48}" font-size="0.6" text-anchor="middle" font-weight="700" fill="#111">${stepOf(it)}</text>`
+        : '';
       // línea ancha transparente para que sea fácil de tocar
       return g(`<path d="${d}" stroke="transparent" stroke-width="1.2" fill="none"/>
-        <path d="${d}" stroke="#111" stroke-width="${width}" fill="none"${dash} stroke-linecap="round" marker-end="url(#ah${id})"/>`);
+        <path d="${d}" stroke="#111" stroke-width="${width}" fill="none"${dash} stroke-linecap="round" marker-end="url(#ah${id})"/>${badge}`);
     }
   }
 }
 
-function drawingSvg(dibujo, preview = null) {
+function drawingSvg(dibujo, preview = null, opts = {}) {
   const id = ++svgSeq;
   const items = [...((dibujo && dibujo.items) || []), ...(preview ? [preview] : [])];
+  if (opts.badges == null) opts = { ...opts, badges: maxStep(items) > 1 };
+  // orden de dibujo: flechas, luego fichas y la bola encima de todo
+  const layer = (it) => (ARROWS.includes(it.t) ? 0 : it.t === 'ball' ? 2 : 1);
+  const order = items.map((it, i) => i).sort((a, b) => layer(items[a]) - layer(items[b]));
   return `<svg viewBox="-1 -1 42 22" xmlns="http://www.w3.org/2000/svg" class="rink-svg">
     <defs><marker id="ah${id}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs>
-    ${rinkMarkup()}${items.map((it, i) => itemMarkup(it, id, i)).join('')}</svg>`;
+    ${rinkMarkup()}${order.map((i) => itemMarkup(items[i], id, i, opts)).join('')}</svg>`;
+}
+
+// ---------- Animación ("vídeo") de los movimientos ----------
+// Cada flecha tiene un paso (p). Las del mismo paso se mueven a la vez.
+// - Movimiento / conducción: se mueve la jugadora más cercana al inicio de la flecha
+//   (en conducción también la bola que lleva).
+// - Pase / tiro: se mueve la bola más cercana al inicio de la flecha.
+
+const stepOf = (it) => it.p || 1;
+const maxStep = (items) => items.reduce((m, it) => (ARROWS.includes(it.t) ? Math.max(m, stepOf(it)) : m), 0);
+const hasMoves = (dibujo) => !!dibujo && (dibujo.items || []).some((it) => ARROWS.includes(it.t));
+const STEP_TIME = { run: 1.4, drive: 1.6, pass: 0.8, shot: 0.7 }; // segundos
+const PLAYERS_T = ['own', 'opp', 'gk'];
+
+// Calcula la línea de tiempo: [{idx, from, to, t0, t1}] y la duración total
+function buildTimeline(items) {
+  const pos = {};
+  items.forEach((it, i) => { if (!ARROWS.includes(it.t)) pos[i] = { x: it.x, y: it.y }; });
+  const dist = (a, b) => Math.hypot((a.x - b.x) * 40, (a.y - b.y) * 20);
+  const nearest = (types, p, maxM, used) => {
+    let best = null, bd = maxM;
+    items.forEach((it, i) => {
+      if (!types.includes(it.t) || used.has(i)) return;
+      const d = dist(pos[i], p);
+      if (d < bd) { bd = d; best = i; }
+    });
+    return best;
+  };
+  const segs = [];
+  let t = 0.4; // pequeña pausa al empezar
+  for (let s = 1; s <= maxStep(items); s++) {
+    const arrows = items.filter((it) => ARROWS.includes(it.t) && stepOf(it) === s);
+    if (!arrows.length) continue;
+    const dur = Math.max(...arrows.map((a) => STEP_TIME[a.t]));
+    const used = new Set();
+    const moves = [];
+    arrows.forEach((a) => {
+      const start = { x: a.x, y: a.y }, end = { x: a.x2, y: a.y2 };
+      const len = STEP_TIME[a.t];
+      if (a.t === 'pass' || a.t === 'shot') {
+        const b = nearest(['ball'], start, 2.5, used);
+        if (b != null) { used.add(b); moves.push({ idx: b, from: { ...pos[b] }, to: end, t0: t, t1: t + len }); }
+      } else {
+        const pl = nearest(PLAYERS_T, start, 2.5, used);
+        if (pl != null) {
+          used.add(pl);
+          moves.push({ idx: pl, from: { ...pos[pl] }, to: end, t0: t, t1: t + len });
+          if (a.t === 'drive') { // la bola va pegada a la jugadora
+            const b = nearest(['ball'], pos[pl], 2, used);
+            if (b != null) {
+              used.add(b);
+              let off = { x: pos[b].x - pos[pl].x, y: pos[b].y - pos[pl].y };
+              // si la bola está justo encima de la jugadora, se lleva un poco por delante
+              if (Math.hypot(off.x * 40, off.y * 20) < 0.4) {
+                const dx = (end.x - pos[pl].x) * 40, dy = (end.y - pos[pl].y) * 20, L = Math.hypot(dx, dy) || 1;
+                off = { x: (dx / L) * 0.9 / 40, y: (dy / L) * 0.9 / 20 };
+              }
+              moves.push({ idx: b, from: { ...pos[b] }, to: { x: end.x + off.x, y: end.y + off.y }, t0: t, t1: t + len });
+            }
+          }
+        }
+      }
+    });
+    moves.forEach((m) => { pos[m.idx] = { ...m.to }; segs.push({ ...m, step: s }); });
+    t += dur + 0.3;
+  }
+  return { segs, total: t + 0.8 };
+}
+
+// Posición de las fichas en el segundo t
+function positionsAt(items, timeline, t) {
+  const pos = {};
+  const ease = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+  timeline.segs.forEach((s) => {
+    if (t < s.t0) return;
+    const k = t >= s.t1 ? 1 : ease((t - s.t0) / (s.t1 - s.t0));
+    pos[s.idx] = { x: s.from.x + (s.to.x - s.from.x) * k, y: s.from.y + (s.to.y - s.from.y) * k };
+  });
+  const step = (timeline.segs.find((s) => t >= s.t0 && t <= s.t1) || {}).step ?? null;
+  return { pos, step };
+}
+
+// Reproductor: dibujo con botón ▶; se repite en bucle mientras está a la vista
+function mountDrawing(container, dibujo) {
+  container.innerHTML = drawingSvg(dibujo);
+  if (!hasMoves(dibujo)) return;
+  const items = dibujo.items;
+  const timeline = buildTimeline(items);
+  container.classList.add('video');
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'video-btn';
+  btn.title = 'Ver el ejercicio en movimiento';
+  btn.textContent = '▶';
+  const bar = document.createElement('div');
+  bar.className = 'video-bar';
+  container.append(btn, bar);
+  let raf = null, t0 = 0;
+  const frame = (now) => {
+    if (!container.isConnected) { raf = null; return; }
+    const t = ((now - t0) / 1000) % timeline.total;
+    const { pos, step } = positionsAt(items, timeline, t);
+    const svg = container.querySelector('svg');
+    const tmp = document.createElement('div');
+    tmp.innerHTML = drawingSvg(dibujo, null, { pos, step, badges: maxStep(items) > 1 });
+    svg.replaceWith(tmp.firstElementChild);
+    bar.style.width = `${(t / timeline.total) * 100}%`;
+    raf = requestAnimationFrame(frame);
+  };
+  const stop = () => {
+    cancelAnimationFrame(raf); raf = null;
+    btn.textContent = '▶'; container.classList.remove('playing');
+    container.querySelector('svg').replaceWith(Object.assign(document.createElement('div'), { innerHTML: drawingSvg(dibujo) }).firstElementChild);
+    bar.style.width = '0';
+  };
+  const toggle = (ev) => {
+    ev.stopPropagation();
+    if (raf) return stop();
+    t0 = performance.now();
+    btn.textContent = '❚❚'; container.classList.add('playing');
+    raf = requestAnimationFrame(frame);
+  };
+  btn.onclick = toggle;
+  container.onclick = toggle;
 }
 
 function openDrawEditor(dibujo, onDone) {
@@ -453,6 +605,8 @@ function openDrawEditor(dibujo, onDone) {
   const undoList = [];
   let tool = 'own';
   let drag = null;
+  let step = Math.max(1, maxStep(items)); // paso de las flechas nuevas
+  let playing = null; // animación de prueba en marcha
   const svg = $('drawSvg');
   const dlg = $('dlgDraw');
   const snapshot = () => { undoList.push(JSON.stringify(items)); if (undoList.length > 50) undoList.shift(); };
@@ -488,10 +642,26 @@ function openDrawEditor(dibujo, onDone) {
   };
   const nextLabel = (t) => String(items.filter((x) => x.t === t).length + 1);
 
-  const redraw = () => {
+  const redraw = (opts = { badges: true }) => {
     const tmp = document.createElement('div');
-    tmp.innerHTML = drawingSvg({ items }, drag && drag.preview);
+    tmp.innerHTML = drawingSvg({ items }, drag && drag.preview, opts);
     svg.innerHTML = tmp.firstElementChild.innerHTML;
+  };
+  // ▶ Ver: reproduce la animación dentro del editor (mientras tanto no se edita)
+  const stopPreview = () => { if (playing) { cancelAnimationFrame(playing.raf); playing = null; redraw(); drawTools(); } };
+  const startPreview = () => {
+    if (!items.some((it) => ARROWS.includes(it.t))) { alert('Dibuja primero alguna flecha de movimiento, pase o conducción.'); return; }
+    const timeline = buildTimeline(items);
+    const t0 = performance.now();
+    playing = { raf: 0 };
+    const frame = (now) => {
+      if (!playing || !dlg.open) { playing = null; return; }
+      const t = ((now - t0) / 1000) % timeline.total;
+      redraw({ ...positionsAt(items, timeline, t), badges: true });
+      playing.raf = requestAnimationFrame(frame);
+    };
+    playing.raf = requestAnimationFrame(frame);
+    drawTools();
   };
   const drawTools = () => {
     $('drawTools').replaceChildren(
@@ -500,8 +670,24 @@ function openDrawEditor(dibujo, onDone) {
         b.type = 'button';
         b.className = `tool tool-${k}` + (tool === k ? ' active' : '');
         b.innerHTML = `<span class="tool-icon">${icon}</span><span class="tool-label">${label}</span>`;
-        b.onclick = () => { tool = k; drawTools(); };
+        b.onclick = () => { stopPreview(); tool = k; drawTools(); };
         return b;
+      }),
+      // paso de las flechas nuevas (orden de los movimientos)
+      (() => {
+        const box = document.createElement('div');
+        box.className = 'tool tool-step';
+        box.innerHTML = '<span class="tool-label">Paso</span><span class="step-ctl"><button type="button">−</button><b></b><button type="button">+</button></span>';
+        box.querySelector('b').textContent = step;
+        const [minus, plus] = box.querySelectorAll('button');
+        minus.onclick = () => { step = Math.max(1, step - 1); drawTools(); };
+        plus.onclick = () => { step = Math.min(20, step + 1); drawTools(); };
+        return box;
+      })(),
+      Object.assign(document.createElement('button'), {
+        type: 'button', className: 'tool tool-play' + (playing ? ' active' : ''),
+        innerHTML: `<span class="tool-icon">${playing ? '■' : '▶'}</span><span class="tool-label">${playing ? 'Parar' : 'Ver'}</span>`,
+        onclick: () => (playing ? stopPreview() : startPreview()),
       }),
       Object.assign(document.createElement('button'), {
         type: 'button', className: 'tool', innerHTML: '<span class="tool-icon">↶</span><span class="tool-label">Deshacer</span>',
@@ -512,13 +698,21 @@ function openDrawEditor(dibujo, onDone) {
         onclick: () => { if (items.length && confirm('¿Borrar todo el dibujo?')) { snapshot(); items = []; redraw(); } },
       }),
     );
-    $('drawHint').textContent = DRAW_HINTS[tool] ||
-      (ARROWS.includes(tool) ? 'Arrastra desde el inicio hasta el final de la flecha.' : 'Toca la pista para colocarlo.');
+    $('drawHint').textContent = playing ? 'Viendo el movimiento. Pulsa «Parar» para seguir dibujando.' : DRAW_HINTS[tool] ||
+      (ARROWS.includes(tool)
+        ? `Arrastra desde el inicio hasta el final de la flecha (paso ${step}). Las flechas del mismo paso se mueven a la vez.`
+        : 'Toca la pista para colocarlo.');
   };
 
   svg.onpointerdown = (ev) => {
     ev.preventDefault();
+    if (playing) return;
     const p = toPoint(ev);
+    if (tool === 'setp') {
+      const h = hit(p);
+      if (h && ARROWS.includes(items[h.i].t)) { snapshot(); items[h.i].p = step; redraw(); }
+      return;
+    }
     if (tool === 'erase') {
       const h = hit(p);
       if (h) { snapshot(); items.splice(h.i, 1); redraw(); }
@@ -530,7 +724,7 @@ function openDrawEditor(dibujo, onDone) {
       return;
     }
     if (ARROWS.includes(tool)) {
-      drag = { preview: { t: tool, x: p.x, y: p.y, x2: p.x, y2: p.y } };
+      drag = { preview: { t: tool, x: p.x, y: p.y, x2: p.x, y2: p.y, p: step } };
       capture(ev);
       return;
     }
@@ -563,8 +757,9 @@ function openDrawEditor(dibujo, onDone) {
     redraw();
   };
 
-  $('drawCancel').onclick = () => dlg.close();
-  $('drawOk').onclick = () => { dlg.close(); onDone({ items }); };
+  $('drawCancel').onclick = () => { stopPreview(); dlg.close(); };
+  // con movimientos se guarda como "vídeo" (animado); sin movimientos, como imagen
+  $('drawOk').onclick = () => { stopPreview(); dlg.close(); onDone({ items, animado: hasMoves({ items }) }); };
   drawTools();
   redraw();
   dlg.showModal();

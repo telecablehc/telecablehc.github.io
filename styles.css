@@ -489,3 +489,9 @@ dialog.draw-dialog { width: min(1100px, calc(100vw - 12px)); max-height: 96vh; p
 }
 .video-dl:disabled { background: var(--warn); opacity: 1; }
 @media print { .video-dl { display: none; } }
+
+/* Inicio: tercer botón y pantalla vacía */
+.home-btn + .home-btn + .home-btn { border-color: var(--line); }
+.empty-screen { text-align: center; padding: 12vh 16px; }
+.empty-icon { font-size: 56px; }
+.empty-screen h2 { font-size: 22px; text-transform: none; letter-spacing: 0; color: var(--text); }

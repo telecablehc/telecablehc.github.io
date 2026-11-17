@@ -931,7 +931,7 @@ function toast(msg) {
 // La pantalla va en la dirección (#partidos, #juego…), así el botón
 // «atrás» del móvil funciona.
 
-const ROUTES = ['inicio', 'partidos', 'entrenos', 'juego', 'totales', 'plan', 'biblioteca'];
+const ROUTES = ['inicio', 'partidos', 'entrenos', 'juego', 'totales', 'plan', 'biblioteca', 'video'];
 let route = 'inicio';
 const routeStack = [];
 const sectionOf = (mode) => (mode === 'entreno' ? 'entrenos' : 'partidos');
@@ -981,6 +981,7 @@ function renderHeader() {
     totales: 'Totales',
     plan: 'Plan de entreno',
     biblioteca: 'Biblioteca de ejercicios',
+    video: 'Análisis - Vídeo',
     juego: S.mode === 'partido' ? `Partido${S.info.rival ? ' vs ' + S.info.rival : ''}` : `Entreno${S.info.objetivo ? ' · ' + S.info.objetivo : ''}`,
   };
   $('screenTitle').textContent = titles[route];

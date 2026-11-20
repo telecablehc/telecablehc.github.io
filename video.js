@@ -366,9 +366,18 @@ function renderClips(v) {
   }
   const canPlay = isFileSource(v) && !!loadedFiles[v.id];
   const groups = {};
-  v.clips.filter((c) => vaFilter.tema === 'todos' || (c.tema || 'Sin tema') === vaFilter.tema)
-    .forEach((c) => (groups[c.tema || 'Sin tema'] = groups[c.tema || 'Sin tema'] || []).push(c));
-  box.replaceChildren(...Object.entries(groups).flatMap(([tema, clips]) => {
+  const visible = v.clips.filter((c) => vaFilter.tema === 'todos' || (c.tema || 'Sin tema') === vaFilter.tema);
+  visible.forEach((c) => (groups[c.tema || 'Sin tema'] = groups[c.tema || 'Sin tema'] || []).push(c));
+  // ⬇ todos los clips que se ven (todos, o los del tema elegido), en el orden de la lista
+  const all = document.createElement('div');
+  all.className = 'row-btns va-dl-all';
+  const allBtn = Object.assign(document.createElement('button'), {
+    className: 'primary', textContent: `⬇ Descargar ${vaFilter.tema === 'todos' ? 'todos' : 'los de «' + vaFilter.tema + '»'} (${visible.length})`,
+  });
+  allBtn.onclick = () => (canPlay ? downloadAllClips(Object.values(groups).flat(), allBtn) : alert('Primero elige el archivo de vídeo.'));
+  all.append(allBtn);
+  all.hidden = !isFileSource(v) || !visible.length;
+  box.replaceChildren(all, ...Object.entries(groups).flatMap(([tema, clips]) => {
     const h = document.createElement('h4');
     h.className = 'va-tema';
     h.textContent = tema;
@@ -644,84 +653,189 @@ function seekTo(t) {
   });
 }
 
-async function downloadClip(clip, button) {
+// Graba un clip (con sus dibujos) y devuelve el archivo, o null si se cancela.
+// onProgress(fracción 0–1, parado en un dibujo); isCancelled() se consulta en cada fotograma.
+async function recordClip(clip, onProgress = () => {}, isCancelled = () => false) {
   const fmt = clipVideoFormat();
-  if (!fmt) { alert('Este navegador no permite grabar vídeo. Prueba con Chrome, Edge o un iPhone/iPad actualizado.'); return; }
   const v = curVideo(), video = vid();
-  const label = button.textContent;
-  button.disabled = true;
+  const scale = Math.min(1, 1280 / video.videoWidth);
+  const W = Math.round(video.videoWidth * scale / 2) * 2, H = Math.round(video.videoHeight * scale / 2) * 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const draws = v.marcas.filter((m) => m.dibujo && m.t >= clip.inicio && m.t <= clip.fin).sort((a, b) => a.t - b.t);
+  const images = {};
+  for (const m of draws) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 1000 ${Math.round(1000 * H / W)}">${overlayMarkup(m.dibujo.items, W / H)}</svg>`;
+    images[m.id] = await new Promise((res) => { const img = new Image(); img.onload = () => res(img); img.onerror = () => res(null); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
+  }
+  let overlay = null;
+  const paint = () => {
+    ctx.drawImage(video, 0, 0, W, H);
+    if (overlay) ctx.drawImage(overlay, 0, 0, W, H);
+  };
+  const frame = () => new Promise((r) => requestAnimationFrame(r));
+
+  await seekTo(clip.inicio);
+  paint();
+  const stream = canvas.captureStream(30);
+  const audio = await audioStream();
+  if (audio) audio.getAudioTracks().forEach((tr) => stream.addTrack(tr));
+  // sin sonido, se graba solo imagen (formato sin pista de audio)
+  const mime = audio ? fmt.type : (videoFormat() || fmt).type;
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5000000 });
+  const chunks = [];
+  rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  const finished = new Promise((r) => (rec.onstop = r));
+  rec.start(250);
+  await video.play();
+  let next = 0, cancelled = false;
+  // se graba en tiempo real; en cada dibujo, el vídeo se para DRAW_HOLD segundos
+  for (;;) {
+    if (isCancelled()) { cancelled = true; break; }
+    if (video.currentTime >= clip.fin || video.ended) break;
+    if (next < draws.length && video.currentTime >= draws[next].t) {
+      video.pause();
+      overlay = images[draws[next].id];
+      const until = performance.now() + DRAW_HOLD * 1000;
+      while (performance.now() < until && !isCancelled()) {
+        paint();
+        onProgress((video.currentTime - clip.inicio) / (clip.fin - clip.inicio), true);
+        await frame();
+      }
+      overlay = null;
+      next++;
+      await video.play();
+    }
+    paint();
+    onProgress((video.currentTime - clip.inicio) / (clip.fin - clip.inicio), false);
+    await frame();
+  }
+  video.pause();
+  rec.stop();
+  await finished;
+  stream.getVideoTracks().forEach((tr) => tr.stop());
+  if (cancelled) return null;
+  const safe = (clip.nombre || 'clip').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+  return new File(chunks, `clip-${safe || 'telecable'}.${fmt.ext}`, { type: mime.split(';')[0] });
+}
+
+// Prepara el vídeo para grabar y lo deja como estaba al terminar
+async function withRecording(fn) {
+  if (!clipVideoFormat()) { alert('Este navegador no permite grabar vídeo. Prueba con Chrome, Edge o un iPhone/iPad actualizado.'); return; }
   pauseAnalysisVideo();
   const autoPause = $('vaAutoPause').checked;
   $('vaAutoPause').checked = false; // aquí las paradas en los dibujos las hace la grabación
   $('vaRec').hidden = false;
   try {
-    const scale = Math.min(1, 1280 / video.videoWidth);
-    const W = Math.round(video.videoWidth * scale / 2) * 2, H = Math.round(video.videoHeight * scale / 2) * 2;
-    const canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext('2d');
-    const draws = v.marcas.filter((m) => m.dibujo && m.t >= clip.inicio && m.t <= clip.fin).sort((a, b) => a.t - b.t);
-    const images = {};
-    for (const m of draws) {
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 1000 ${Math.round(1000 * H / W)}">${overlayMarkup(m.dibujo.items, W / H)}</svg>`;
-      images[m.id] = await new Promise((res) => { const img = new Image(); img.onload = () => res(img); img.onerror = () => res(null); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
-    }
-    let overlay = null;
-    const paint = () => {
-      ctx.drawImage(video, 0, 0, W, H);
-      if (overlay) ctx.drawImage(overlay, 0, 0, W, H);
-    };
-
-    await seekTo(clip.inicio);
-    paint();
-    const stream = canvas.captureStream(30);
-    const audio = await audioStream();
-    if (audio) audio.getAudioTracks().forEach((tr) => stream.addTrack(tr));
-    // sin sonido, se graba solo imagen (formato sin pista de audio)
-    const mime = audio ? fmt.type : (videoFormat() || fmt).type;
-    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5000000 });
-    const chunks = [];
-    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-    const finished = new Promise((r) => (rec.onstop = r));
-    rec.start(250);
-    await video.play();
-    let next = 0;
-    // se graba en tiempo real; en cada dibujo, el vídeo se para DRAW_HOLD segundos
-    for (;;) {
-      if (video.currentTime >= clip.fin || video.ended) break;
-      if (next < draws.length && video.currentTime >= draws[next].t) {
-        video.pause();
-        overlay = images[draws[next].id];
-        const until = performance.now() + DRAW_HOLD * 1000;
-        while (performance.now() < until) {
-          paint();
-          button.textContent = 'Grabando…';
-          await new Promise((r) => requestAnimationFrame(r));
-        }
-        overlay = null;
-        next++;
-        await video.play();
-      }
-      paint();
-      button.textContent = `Grabando ${Math.round(((video.currentTime - clip.inicio) / (clip.fin - clip.inicio)) * 100)}%`;
-      await new Promise((r) => requestAnimationFrame(r));
-    }
-    video.pause();
-    rec.stop();
-    await finished;
-    stream.getVideoTracks().forEach((tr) => tr.stop());
-    const safe = (clip.nombre || 'clip').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
-    const file = new File(chunks, `clip-${safe || 'telecable'}.${fmt.ext}`, { type: fmt.type.split(';')[0] });
-    await shareOrDownload(file);
-    toast('Clip listo');
+    await fn();
   } catch (err) {
-    alert('No se ha podido crear el clip: ' + (err && err.message ? err.message : err));
+    alert('No se ha podido crear el vídeo: ' + (err && err.message ? err.message : err));
   } finally {
     $('vaRec').hidden = true;
+    $('vaRec').textContent = '● Grabando clip…';
     $('vaAutoPause').checked = autoPause;
-    button.disabled = false;
-    button.textContent = label;
   }
+}
+
+async function downloadClip(clip, button) {
+  const label = button.textContent;
+  button.disabled = true;
+  await withRecording(async () => {
+    const file = await recordClip(clip, (k, hold) => (button.textContent = hold ? 'Grabando…' : `Grabando ${Math.round(k * 100)}%`));
+    if (file) { await shareOrDownload(file); toast('Clip listo'); }
+  });
+  button.disabled = false;
+  button.textContent = label;
+}
+
+// Descarga varios clips de una vez: en móvil/tablet se comparten juntos; en ordenador, un .zip
+let vaCancelAll = false;
+async function downloadAllClips(clips, button) {
+  if (!clips.length) return;
+  const v = curVideo();
+  const holds = v.marcas.filter((m) => m.dibujo && clips.some((c) => m.t >= c.inicio && m.t <= c.fin)).length;
+  const secs = Math.round(clips.reduce((a, c) => a + (c.fin - c.inicio), 0) + holds * DRAW_HOLD);
+  if (!confirm(`Se van a grabar ${clips.length} clips (unos ${fmtVT(secs)}). El vídeo se reproduce mientras se graba. ¿Empezar?`)) return;
+  const label = button.textContent;
+  button.disabled = true;
+  vaCancelAll = false;
+  const cancelBtn = Object.assign(document.createElement('button'), {
+    className: 'ghost small danger', textContent: 'Cancelar',
+    onclick: () => { vaCancelAll = true; },
+  });
+  button.after(cancelBtn);
+  await withRecording(async () => {
+    const files = [];
+    for (let i = 0; i < clips.length; i++) {
+      const prefix = `Clip ${i + 1}/${clips.length}`;
+      $('vaRec').textContent = `● ${prefix}: ${clips[i].nombre}`;
+      const file = await recordClip(clips[i],
+        (k, hold) => (button.textContent = `${prefix} · ${hold ? 'dibujo' : Math.round(k * 100) + '%'}`),
+        () => vaCancelAll);
+      if (!file) break;
+      // número delante para que queden en orden y sin nombres repetidos
+      files.push(new File([file], `${String(i + 1).padStart(2, '0')}-${file.name}`, { type: file.type }));
+    }
+    if (vaCancelAll) { toast('Descarga cancelada'); return; }
+    await shareAllOrZip(files, `clips-${(v.titulo || 'analisis').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '-').replace(/^-|-$/g, '').toLowerCase()}`);
+    toast(`${files.length} clips listos`);
+  });
+  cancelBtn.remove();
+  button.disabled = false;
+  button.textContent = label;
+}
+
+async function shareAllOrZip(files, zipName) {
+  const touch = matchMedia('(pointer: coarse)').matches;
+  if (touch && navigator.canShare && navigator.canShare({ files })) {
+    try { await navigator.share({ files, title: zipName }); return; }
+    catch (err) { if (err.name === 'AbortError') return; }
+  }
+  downloadFile(new File([await makeZip(files)], `${zipName}.zip`, { type: 'application/zip' }));
+}
+
+// ZIP sencillo (sin comprimir: los vídeos ya van comprimidos)
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+async function makeZip(files) {
+  const enc = new TextEncoder();
+  const parts = [], central = [];
+  let offset = 0;
+  const d = new Date();
+  const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  for (const f of files) {
+    const data = new Uint8Array(await f.arrayBuffer());
+    const name = enc.encode(f.name);
+    const crc = crc32(data);
+    const local = new DataView(new ArrayBuffer(30));
+    local.setUint32(0, 0x04034b50, true); local.setUint16(4, 20, true); local.setUint16(6, 0x0800, true); // UTF-8
+    local.setUint16(8, 0, true); local.setUint16(10, dosTime, true); local.setUint16(12, dosDate, true);
+    local.setUint32(14, crc, true); local.setUint32(18, data.length, true); local.setUint32(22, data.length, true);
+    local.setUint16(26, name.length, true); local.setUint16(28, 0, true);
+    parts.push(local.buffer, name, data);
+    const cd = new DataView(new ArrayBuffer(46));
+    cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true); cd.setUint16(8, 0x0800, true);
+    cd.setUint16(10, 0, true); cd.setUint16(12, dosTime, true); cd.setUint16(14, dosDate, true);
+    cd.setUint32(16, crc, true); cd.setUint32(20, data.length, true); cd.setUint32(24, data.length, true);
+    cd.setUint16(28, name.length, true); cd.setUint32(42, offset, true);
+    central.push(cd.buffer, name);
+    offset += 30 + name.length + data.length;
+  }
+  const cdSize = central.reduce((a, p) => a + (p.byteLength ?? p.length), 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, end.buffer], { type: 'application/zip' });
 }
 
 // ---------- Archivo de vídeo ----------

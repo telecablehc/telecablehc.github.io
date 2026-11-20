@@ -550,3 +550,5 @@ dialog.draw-dialog { width: min(1100px, calc(100vw - 12px)); max-height: 96vh; p
 .field-col input { padding: 10px; font-size: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); }
 #dlgVideo select, #dvPartido { padding: 10px; font-size: 15px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); }
 #vaFilters select, .va-controls select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; font-size: 14px; }
+.va-dl-all { margin: 8px 0 4px; }
+.va-dl-all .primary { flex: 1 1 240px; padding: 12px; }

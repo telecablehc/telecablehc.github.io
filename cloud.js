@@ -21,6 +21,11 @@ const KEY_DIRTY = 'hoquei.cloud.dirty';       // ids de partidos pendientes de s
 const KEY_DELETED = 'hoquei.cloud.deleted';   // ids borrados pendientes de subir
 const KEY_LASTPULL = 'hoquei.cloud.lastPull'; // última fecha de cambios bajados
 const KEY_ACCOUNT = 'hoquei.cloud.account';   // { id, email } del usuario de este dispositivo
+// Cuenta a la que pertenecen los datos guardados en el dispositivo (no se borra al cerrar sesión).
+// Si entra otra cuenta, los datos de la anterior se apartan (KEY_STASH + id) y se recuperan cuando vuelva:
+// así nunca se mezclan los datos de dos cuentas / equipos (p. ej. la cuenta de pruebas y la real).
+const KEY_OWNER = 'hoquei.cloud.owner';
+const KEY_STASH = 'hoquei.cuenta.';
 // Planes de entreno y biblioteca de ejercicios: tabla "documentos" (id = "tipo:id")
 const KEY_DOCS_DIRTY = 'hoquei.cloud.docsDirty';
 const KEY_DOCS_LASTPULL = 'hoquei.cloud.docsLastPull';
@@ -63,6 +68,28 @@ function cloudMarkDoc(kind, id) {
   scheduleSync();
 }
 
+// Sube filas. Si alguna pertenece a otro equipo (datos de otra cuenta que quedaron en este
+// dispositivo con versiones anteriores de la app), la base de datos la rechaza: se devuelven sus ids
+// para quitarlas de aquí (siguen guardadas en la nube de su equipo).
+const isRlsError = (e) => !!e && (e.code === '42501' || /row-level security/i.test(e.message || ''));
+let reloadApp = () => location.reload(); // (las pruebas la sustituyen)
+async function upsertRows(table, rows) {
+  const { error } = await sb.from(table).upsert(rows);
+  if (!error) return [];
+  if (!isRlsError(error)) throw error;
+  const foreign = [];
+  for (const row of rows) {
+    const { error: e } = await sb.from(table).upsert(row);
+    if (!e) continue;
+    if (isRlsError(e)) foreign.push(row.id); else throw e;
+  }
+  return foreign;
+}
+
+function foreignRemoved(n) {
+  if (n) toast(`Se han quitado de este dispositivo ${n} dato${n > 1 ? 's' : ''} de otra cuenta`);
+}
+
 async function pushDocs() {
   const dirty = load(KEY_DOCS_DIRTY, []);
   if (!dirty.length) return;
@@ -71,8 +98,12 @@ async function pushDocs() {
     const item = load(DOC_KEYS[kind], []).find((x) => x.id === id);
     return item ? { id: key, tipo: kind, datos: item, borrado: false } : { id: key, tipo: kind, datos: {}, borrado: true };
   });
-  const { error } = await sb.from('documentos').upsert(rows);
-  if (error) throw error;
+  const foreign = await upsertRows('documentos', rows);
+  foreign.forEach((key) => {
+    const [kind, id] = key.split(':');
+    store(DOC_KEYS[kind], load(DOC_KEYS[kind], []).filter((x) => x.id !== id));
+  });
+  foreignRemoved(foreign.length);
   const done = new Set(dirty);
   store(KEY_DOCS_DIRTY, load(KEY_DOCS_DIRTY, []).filter((k) => !done.has(k)));
 }
@@ -130,8 +161,12 @@ async function pushGames() {
     const rec = history.find((r) => r.id === id);
     return rec ? { id, datos: rec, borrado: false } : { id, datos: {}, borrado: true };
   });
-  const { error } = await sb.from('partidos').upsert(rows);
-  if (error) throw error;
+  const foreign = await upsertRows('partidos', rows);
+  if (foreign.length) {
+    store(KEY_HISTORY, load(KEY_HISTORY, []).filter((r) => !foreign.includes(r.id)));
+    foreignRemoved(foreign.length);
+    render();
+  }
   // quitar de pendientes solo lo que se ha subido (pudo cambiar algo mientras tanto)
   const done = new Set(dirty);
   store(KEY_DIRTY, load(KEY_DIRTY, []).filter((id) => !done.has(id)));
@@ -318,6 +353,10 @@ async function forgotPassword() {
   loginMessage('Te hemos enviado un email para cambiar la contraseña.', true);
 }
 
+// Datos del dispositivo que pertenecen a una cuenta
+const localDataKeys = () => [KEY_SESSION, KEY_HISTORY, ...Object.values(DOC_KEYS),
+  KEY_DIRTY, KEY_DELETED, KEY_LASTPULL, KEY_DOCS_DIRTY, KEY_DOCS_LASTPULL];
+
 async function afterLogin(user) {
   // Comprobar que el email está autorizado
   const { data: member, error } = await sb.rpc('es_miembro');
@@ -327,13 +366,35 @@ async function afterLogin(user) {
     return;
   }
   const prev = load(KEY_ACCOUNT, null);
-  if (!prev || prev.id !== user.id) {
+  const owner = load(KEY_OWNER, null) || (prev && prev.id) || null;
+  if (owner && owner !== user.id) {
+    // Otra cuenta: se apartan los datos de la anterior y se recuperan los de esta (si los había)
+    const keys = localDataKeys();
+    const mine = {};
+    keys.forEach((k) => (mine[k] = localStorage.getItem(k)));
+    try {
+      localStorage.setItem(KEY_STASH + owner, JSON.stringify(mine));
+    } catch {
+      await sb.auth.signOut();
+      showLogin('No hay espacio en este dispositivo para guardar aparte los datos de la otra cuenta. Haz una copia de seguridad y libera espacio.');
+      return;
+    }
+    const theirs = load(KEY_STASH + user.id, null);
+    keys.forEach((k) => (theirs && theirs[k] != null ? localStorage.setItem(k, theirs[k]) : localStorage.removeItem(k)));
+    localStorage.removeItem(KEY_STASH + user.id);
+    store(KEY_OWNER, user.id);
+    store(KEY_ACCOUNT, { id: user.id, email: user.email });
+    reloadApp(); // se vuelve a cargar todo con los datos de esta cuenta
+    return;
+  }
+  if (!owner) {
     // Primera vez en este dispositivo: se suben los partidos que ya había guardados
     store(KEY_LASTPULL, null);
     store(KEY_DOCS_LASTPULL, null);
     load(KEY_HISTORY, []).forEach((r) => cloudMarkDirty(r.id));
     Object.entries(DOC_KEYS).forEach(([kind, key]) => load(key, []).forEach((x) => cloudMarkDoc(kind, x.id)));
   }
+  store(KEY_OWNER, user.id);
   cloudUser = { id: user.id, email: user.email };
   store(KEY_ACCOUNT, cloudUser);
   hideLogin();

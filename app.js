@@ -1591,6 +1591,7 @@ async function exportBackup() {
     planes: loadPlans(),
     ejercicios: loadExercises(),
     videos: loadVideos(),
+    teclados: loadKeyboards(),
   };
   const name = `telecable-copia-${today()}.json`;
   const file = new File([JSON.stringify(data)], name, { type: 'application/json' });
@@ -1654,6 +1655,7 @@ async function importBackup(file) {
   const nPlans = mergeDocs(KEY_PLANS, 'plan', data.planes);
   const nEx = mergeDocs(KEY_EXERCISES, 'ejercicio', data.ejercicios);
   mergeDocs(KEY_VIDEOS, 'video', data.videos);
+  mergeDocs(KEY_KEYBOARDS, 'teclado', data.teclados);
 
   // Partido en curso: solo si en este dispositivo no hay nada empezado
   let session = false;

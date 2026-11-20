@@ -24,7 +24,7 @@ const KEY_ACCOUNT = 'hoquei.cloud.account';   // { id, email } del usuario de es
 // Planes de entreno y biblioteca de ejercicios: tabla "documentos" (id = "tipo:id")
 const KEY_DOCS_DIRTY = 'hoquei.cloud.docsDirty';
 const KEY_DOCS_LASTPULL = 'hoquei.cloud.docsLastPull';
-const DOC_KEYS = { plan: 'hoquei.planes', ejercicio: 'hoquei.ejercicios', video: 'hoquei.videos' };
+const DOC_KEYS = { plan: 'hoquei.planes', ejercicio: 'hoquei.ejercicios', video: 'hoquei.videos', teclado: 'hoquei.teclados' };
 let docsError = ''; // p. ej. si aún no se ha creado la tabla en Supabase
 
 let sb = null;

@@ -162,6 +162,11 @@
       <div id="vaDrawBar" class="va-drawbar" hidden></div>
 
       <h2>Marcar acción</h2>
+      <div class="va-kb-bar">
+        <span>Teclado: <b id="vaKbName">Estándar</b></span>
+        <button id="vaKbChange" class="ghost small">Cambiar</button>
+        <button id="vaKbEdit" class="ghost small">Editar</button>
+      </div>
       <div id="vaTags" class="va-tags"></div>
 
       <div class="seg wide va-tabs">
@@ -171,6 +176,35 @@
       <div id="vaFilters" class="chips-filter"></div>
       <div id="vaList"></div>
     </section>
+
+    <!-- Elegir teclado -->
+    <dialog id="dlgKbPick">
+      <h3>Elegir teclado</h3>
+      <div id="kbPickList"></div>
+      <div class="dlg-actions">
+        <button type="button" id="kbNew" class="ghost">＋ Crear teclado nuevo</button>
+        <button type="button" id="kbPickClose" class="primary">Cerrar</button>
+      </div>
+    </dialog>
+
+    <!-- Editar teclado -->
+    <dialog id="dlgKbEdit">
+      <h3 id="kbTitle">Editar teclado</h3>
+      <label class="field-col">Nombre del teclado
+        <input id="kbName" type="text" placeholder="Ej.: Ataque posicional">
+      </label>
+      <p class="hint">Toca el color de un botón para cambiarlo.</p>
+      <div id="kbRows"></div>
+      <button type="button" id="kbAdd" class="ghost add-past">＋ Añadir botón</button>
+      <div class="ask-label">Así se verá</div>
+      <div id="kbPreview" class="va-tags"></div>
+      <div class="dlg-actions">
+        <button type="button" id="kbCancel" class="ghost">Cancelar</button>
+        <span class="spacer"></span>
+        <button type="button" id="kbSaveLib" class="ghost">💾 Guardar con este nombre</button>
+        <button type="button" id="kbOk" class="primary">Usar en este partido</button>
+      </div>
+    </dialog>
 
     <!-- Datos de un análisis -->
     <dialog id="dlgVideo">
@@ -187,6 +221,9 @@
       </div>
       <label class="field-col" id="dvUrlWrap">Enlace del partido en OK Liga TV
         <input id="dvUrl" type="url" placeholder="https://www.okliga.tv/…">
+      </label>
+      <label class="field-col" id="dvKbWrap">Teclado para marcar acciones
+        <select id="dvTeclado"></select>
       </label>
       <div class="dlg-actions">
         <button type="button" id="dvDelete" class="ghost danger">Borrar análisis</button>

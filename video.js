@@ -20,6 +20,24 @@ const MARK_TYPES = [
   ['defensa', 'Defensa', '#5f7d8c'], ['otro', 'Otro', '#888888'],
 ];
 const markType = (k) => MARK_TYPES.find((m) => m[0] === k) || ['otro', 'Otro', '#888'];
+
+// ---------- Teclados (botones de "Marcar acción") ----------
+// Cada análisis lleva su propio teclado ({nombre, botones:[{k, label, color}]}); si no tiene, el estándar.
+// Los teclados se pueden guardar con un nombre (biblioteca, se sincroniza) para elegirlos en otro partido.
+// Cada acción guarda su nombre y color, así no cambia aunque luego se cambie el teclado.
+const KEY_KEYBOARDS = 'hoquei.teclados';
+const STD_KEYBOARD = { nombre: 'Estándar', botones: MARK_TYPES.map(([k, label, color]) => ({ k, label, color })) };
+const KB_COLORS = ['#1f9d55', '#d64545', '#2f6fdb', '#7b3fe4', '#e07b00', '#14a3a3', '#8a6d3b', '#b8860b', '#5f7d8c', '#e83e8c', '#20c997', '#888888'];
+const loadKeyboards = () => load(KEY_KEYBOARDS, []);
+const keyboardOf = (v) => (v && v.teclado && v.teclado.botones.length ? v.teclado : STD_KEYBOARD);
+const copyKb = (kb) => JSON.parse(JSON.stringify({ nombre: kb.nombre, botones: kb.botones }));
+
+// [clave, nombre, color] de una acción (dibujos aparte)
+function markInfo(v, m) {
+  if (m.dibujo) return ['dibujos', '✏️ Dibujo', '#555555'];
+  const b = keyboardOf(v).botones.find((x) => x.k === m.tipo) || STD_KEYBOARD.botones.find((x) => x.k === m.tipo);
+  return [m.tipo, m.label || (b && b.label) || 'Otro', m.color || (b && b.color) || '#888888'];
+}
 const PRE_ROLL = 5;   // al saltar a una acción, se empieza unos segundos antes
 const POST_ROLL = 3;  // en "ver todas", se sigue unos segundos después
 const DRAW_HOLD = 3;  // segundos que el vídeo se queda parado en un dibujo
@@ -93,6 +111,15 @@ function openVideoDialog(existing = null) {
   $('dvFecha').value = v.fecha || '';
   $('dvUrl').value = v.url || '';
   $('dvDelete').hidden = !existing;
+  // Teclado (solo al crear; después se cambia en la pantalla del análisis).
+  // Viene elegido el del último análisis.
+  $('dvKbWrap').hidden = !!existing;
+  if (!existing) {
+    const saved = loadKeyboards().sort((a, b) => a.nombre.localeCompare(b.nombre));
+    $('dvTeclado').replaceChildren(new Option('Estándar', ''), ...saved.map((kb) => new Option(kb.nombre, kb.id)));
+    const last = loadVideos().sort((a, b) => (b.creado || '').localeCompare(a.creado || ''))[0];
+    $('dvTeclado').value = last && last.tecladoId && saved.some((k) => k.id === last.tecladoId) ? last.tecladoId : '';
+  }
   $('dvPartido').replaceChildren(
     new Option('— Ninguno —', ''),
     ...CALENDARIO.map((f) => new Option(`J${f.jornada} · ${f.local ? '🏠' : '✈️'} ${f.rival}`, f.id)),
@@ -122,6 +149,11 @@ function openVideoDialog(existing = null) {
     v.fecha = $('dvFecha').value;
     v.partido = $('dvPartido').value;
     v.url = $('dvUrl').value.trim();
+    if (!existing) {
+      const kb = loadKeyboards().find((k) => k.id === $('dvTeclado').value);
+      v.teclado = kb ? copyKb(kb) : null;
+      v.tecladoId = kb ? kb.id : null;
+    }
     if (v.fuente === 'okliga' && v.url && !/^https:\/\/(www\.)?okliga\.tv\//i.test(v.url)) {
       alert('El enlace debe ser de OK Liga TV (https://www.okliga.tv/…).');
       return;
@@ -188,8 +220,10 @@ function renderAnalysis() {
   $('vaAutoPause').parentElement.hidden = !file;
   $('vaDraw').disabled = $('vaClip').disabled = file && !loaded;
 
-  // Botones de acciones
-  $('vaTags').replaceChildren(...MARK_TYPES.map(([k, label, color]) => {
+  // Botones de acciones (teclado de este análisis)
+  const kb = keyboardOf(v);
+  $('vaKbName').textContent = kb.nombre || 'Sin nombre';
+  $('vaTags').replaceChildren(...kb.botones.map(({ k, label, color }) => {
     const b = document.createElement('button');
     b.className = 'va-tag';
     b.style.setProperty('--tc', color);
@@ -210,7 +244,8 @@ function renderAnalysis() {
 
 async function addMark(tipo) {
   const t = vaNow();
-  const label = markType(tipo)[1];
+  const btn = keyboardOf(curVideo()).botones.find((b) => b.k === tipo) || { label: markType(tipo)[1], color: markType(tipo)[2] };
+  const label = btn.label;
   // la nota va primero: al tocar la jugadora se guarda directamente
   const ans = await ask(`${label} · ${fmtVT(t)}`, [
     { key: 'nota', type: 'num', label: 'Nota (opcional, escríbela antes de elegir la jugadora)', placeholder: 'Ej.: salida por la izquierda' },
@@ -218,7 +253,7 @@ async function addMark(tipo) {
   ]);
   if (!ans) return;
   updateVideo((x) => {
-    x.marcas.push({ id: uid(), t, tipo, num: ans.num || null, nota: ans.nota || '' });
+    x.marcas.push({ id: uid(), t, tipo, label, color: btn.color, num: ans.num || null, nota: ans.nota || '' });
     x.marcas.sort((a, b) => a.t - b.t);
   });
   toast(`${label} marcado en ${fmtVT(t)}`);
@@ -240,14 +275,21 @@ function chip(label, active, onclick, color) {
 }
 
 function renderMarks(v) {
-  const counts = {};
-  v.marcas.forEach((m) => { const k = m.dibujo ? 'dibujos' : m.tipo; counts[k] = (counts[k] || 0) + 1; });
+  // un filtro por cada tipo de acción que haya (en el orden del teclado; después el resto y los dibujos)
+  const kinds = new Map();
+  const order = keyboardOf(v).botones.map((b) => b.k);
+  v.marcas.forEach((m) => {
+    const [k, label, color] = markInfo(v, m);
+    const e = kinds.get(k) || { label, color, n: 0 };
+    e.n++;
+    kinds.set(k, e);
+  });
+  const rank = (k) => (k === 'dibujos' ? 9999 : order.includes(k) ? order.indexOf(k) : 999);
   const players = [...new Set(v.marcas.map((m) => m.num).filter(Boolean))];
   $('vaFilters').replaceChildren(
     chip(`Todas (${v.marcas.length})`, vaFilter.tipo === 'todos', () => { vaFilter.tipo = 'todos'; renderAnalysis(); }),
-    ...MARK_TYPES.filter(([k]) => counts[k]).map(([k, label, color]) =>
-      chip(`${label} (${counts[k]})`, vaFilter.tipo === k, () => { vaFilter.tipo = k; renderAnalysis(); }, color)),
-    ...(counts.dibujos ? [chip(`✏️ Dibujos (${counts.dibujos})`, vaFilter.tipo === 'dibujos', () => { vaFilter.tipo = 'dibujos'; renderAnalysis(); })] : []),
+    ...[...kinds.entries()].sort((a, b) => rank(a[0]) - rank(b[0])).map(([k, e]) =>
+      chip(`${e.label} (${e.n})`, vaFilter.tipo === k, () => { vaFilter.tipo = k; renderAnalysis(); }, k === 'dibujos' ? null : e.color)),
     ...(players.length ? [(() => {
       const sel = document.createElement('select');
       sel.className = 'ghost';
@@ -270,7 +312,7 @@ function renderMarks(v) {
   playAll.hidden = !isFileSource(v) || !loadedFiles[v.id] || !list.length;
   playAll.onclick = () => playSegments(list.map((m) => [Math.max(0, m.t - PRE_ROLL), m.t + (m.dibujo ? 0.1 : POST_ROLL)]));
   box.replaceChildren(playAll, ...list.map((m) => {
-    const [, label, color] = m.dibujo ? ['', '✏️ Dibujo', '#555'] : markType(m.tipo);
+    const [, label, color] = markInfo(v, m);
     const row = document.createElement('div');
     row.className = 'va-mark';
     row.style.setProperty('--tc', color);
@@ -855,10 +897,131 @@ function onFileChosen(file) {
   if (!v.archivo || v.archivo.nombre !== file.name || v.archivo.tam !== file.size) rememberFile(v); else renderAnalysis();
 }
 
+// ---------- Elegir / editar / guardar teclados ----------
+
+function applyKeyboard(kb, fromId = null) {
+  updateVideo((x) => { x.teclado = copyKb(kb); x.tecladoId = fromId; });
+  toast(`Teclado: ${kb.nombre}`);
+}
+
+function openKeyboardPicker() {
+  const v = curVideo();
+  const draw = () => {
+    const saved = loadKeyboards().sort((a, b) => a.nombre.localeCompare(b.nombre));
+    const current = keyboardOf(v);
+    const row = (kb, id, canDelete) => {
+      const r = document.createElement('div');
+      r.className = 'kb-item' + ((id ? v.tecladoId === id : !v.teclado) ? ' active' : '');
+      const pick = document.createElement('button');
+      pick.className = 'kb-pick';
+      pick.innerHTML = '<b></b><span class="kb-dots"></span><small></small>';
+      pick.querySelector('b').textContent = kb.nombre;
+      pick.querySelector('small').textContent = `${kb.botones.length} botones: ${kb.botones.map((b) => b.label).join(', ')}`;
+      pick.querySelector('.kb-dots').append(...kb.botones.map((b) => Object.assign(document.createElement('i'), { style: `background:${b.color}` })));
+      pick.onclick = () => { $('dlgKbPick').close(); applyKeyboard(kb, id); };
+      r.append(pick);
+      if (canDelete) {
+        const del = Object.assign(document.createElement('button'), { className: 'ghost small danger', textContent: 'Borrar' });
+        del.onclick = () => {
+          if (!confirm(`¿Borrar el teclado guardado «${kb.nombre}»? Los partidos que ya lo usan no cambian.`)) return;
+          remove(KEY_KEYBOARDS, 'teclado', id);
+          draw();
+        };
+        r.append(del);
+      }
+      return r;
+    };
+    $('kbPickList').replaceChildren(
+      row(STD_KEYBOARD, null, false),
+      ...saved.map((kb) => row(kb, kb.id, true)),
+      ...(saved.length ? [] : [Object.assign(document.createElement('p'), { className: 'hint', textContent: 'Todavía no hay teclados guardados. Edita el teclado y pulsa «Guardar con este nombre».' })]),
+    );
+    return current;
+  };
+  draw();
+  $('kbNew').onclick = () => {
+    $('dlgKbPick').close();
+    openKeyboardEditor({ nombre: '', botones: [{ k: 'b' + uid(), label: '', color: KB_COLORS[0] }] }, null, true);
+  };
+  $('kbPickClose').onclick = () => $('dlgKbPick').close();
+  $('dlgKbPick').showModal();
+}
+
+function openKeyboardEditor(kbIn, fromId = null, isNew = false) {
+  const kb = copyKb(kbIn);
+  $('kbTitle').textContent = isNew ? 'Teclado nuevo' : 'Editar teclado';
+  $('kbName').value = isNew ? '' : kb.nombre === STD_KEYBOARD.nombre && !fromId ? '' : kb.nombre;
+  const draw = () => {
+    $('kbRows').replaceChildren(...kb.botones.map((b, i) => {
+      const r = document.createElement('div');
+      r.className = 'kb-row';
+      const color = Object.assign(document.createElement('button'), { className: 'va-color', title: 'Cambiar color' });
+      color.style.background = b.color;
+      color.onclick = () => { b.color = KB_COLORS[(KB_COLORS.indexOf(b.color) + 1) % KB_COLORS.length]; draw(); };
+      const input = Object.assign(document.createElement('input'), { type: 'text', value: b.label, placeholder: 'Nombre del botón' });
+      input.oninput = () => { b.label = input.value; drawPreview(); };
+      const btn = (txt, title, fn, cls = '') => Object.assign(document.createElement('button'), { className: 'ghost small ' + cls, textContent: txt, title, onclick: fn });
+      const up = btn('↑', 'Subir', () => { [kb.botones[i - 1], kb.botones[i]] = [kb.botones[i], kb.botones[i - 1]]; draw(); });
+      const down = btn('↓', 'Bajar', () => { [kb.botones[i + 1], kb.botones[i]] = [kb.botones[i], kb.botones[i + 1]]; draw(); });
+      up.disabled = i === 0; down.disabled = i === kb.botones.length - 1;
+      r.append(color, input, up, down, btn('✕', 'Quitar', () => { kb.botones.splice(i, 1); draw(); }, 'danger'));
+      return r;
+    }));
+    drawPreview();
+  };
+  const drawPreview = () => {
+    $('kbPreview').replaceChildren(...kb.botones.map((b) => {
+      const t = Object.assign(document.createElement('button'), { className: 'va-tag', textContent: b.label || '…', tabIndex: -1 });
+      t.style.setProperty('--tc', b.color);
+      return t;
+    }));
+  };
+  // revisa el teclado antes de usarlo o guardarlo
+  const valid = () => {
+    kb.botones.forEach((b) => (b.label = b.label.trim()));
+    if (!kb.botones.length) { alert('Añade al menos un botón.'); return false; }
+    if (kb.botones.some((b) => !b.label)) { alert('Todos los botones necesitan un nombre.'); return false; }
+    const names = kb.botones.map((b) => b.label.toLowerCase());
+    if (new Set(names).size !== names.length) { alert('Hay dos botones con el mismo nombre.'); return false; }
+    return true;
+  };
+  $('kbAdd').onclick = () => {
+    kb.botones.push({ k: 'b' + uid(), label: '', color: KB_COLORS[kb.botones.length % KB_COLORS.length] });
+    draw();
+    const inputs = $('kbRows').querySelectorAll('input');
+    inputs[inputs.length - 1].focus();
+  };
+  $('kbCancel').onclick = () => $('dlgKbEdit').close();
+  $('kbOk').onclick = () => {
+    if (!valid()) return;
+    kb.nombre = $('kbName').value.trim() || (isNew ? 'Teclado del partido' : kb.nombre);
+    $('dlgKbEdit').close();
+    applyKeyboard(kb, fromId);
+  };
+  $('kbSaveLib').onclick = () => {
+    if (!valid()) return;
+    const nombre = $('kbName').value.trim();
+    if (!nombre) { alert('Ponle un nombre al teclado para guardarlo.'); $('kbName').focus(); return; }
+    kb.nombre = nombre;
+    // mismo nombre que uno guardado: se actualiza; si no, se crea uno nuevo
+    const existing = loadKeyboards().find((x) => x.nombre.toLowerCase() === nombre.toLowerCase());
+    if (existing && !confirm(`Ya hay un teclado «${existing.nombre}». ¿Sustituirlo por este?`)) return;
+    const id = existing ? existing.id : uid();
+    upsert(KEY_KEYBOARDS, 'teclado', { id, ...copyKb(kb) });
+    $('dlgKbEdit').close();
+    applyKeyboard(kb, id);
+    toast(`Teclado «${nombre}» guardado`);
+  };
+  draw();
+  $('dlgKbEdit').showModal();
+}
+
 // ---------- Conexión con la interfaz (se llama al final de app.js) ----------
 
 function initVideo() {
   $('vNew').onclick = () => openVideoDialog();
+  $('vaKbChange').onclick = openKeyboardPicker;
+  $('vaKbEdit').onclick = () => { const v = curVideo(); openKeyboardEditor(keyboardOf(v), v.tecladoId || null); };
   $('vaFile').onchange = (ev) => { const f = ev.target.files[0]; ev.target.value = ''; onFileChosen(f); };
   const video = vid();
   video.addEventListener('timeupdate', onTimeUpdate);

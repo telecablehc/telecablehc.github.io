@@ -404,8 +404,15 @@
   </dialog>
 
   <!-- Editar los datos de un partido/entreno terminado -->
-  <dialog id="dlgEditRec">
-    <h3>Editar datos</h3>
+  <dialog id="dlgEditRec" class="edit-rec">
+    <h3>Editar partido</h3>
+    <div id="recTabs" class="seg wide">
+      <button type="button" data-t="datos" class="active">Datos</button>
+      <button type="button" data-t="tiempos">Minutos</button>
+      <button type="button" data-t="eventos">Eventos</button>
+    </div>
+    <div class="rec-scroll">
+    <div data-rectab="datos">
     <div class="form">
       <label>Nuestro equipo <input data-rec="team" type="text"></label>
       <label>Rival <input data-rec="rival" type="text"></label>
@@ -421,6 +428,22 @@
     <div id="recSquad" class="pick"></div>
     <h4>Observaciones</h4>
     <textarea data-rec="notas" rows="5"></textarea>
+    </div>
+    <div data-rectab="tiempos" hidden>
+      <p class="hint">Escribe los tiempos como 12:30 (minutos:segundos). Si cambias los minutos de una jugadora, en el resumen sale «corregido a mano» en lugar de sus entradas y salidas.</p>
+      <h4>Partes y posesión</h4>
+      <div id="recParts"></div>
+      <h4>Minutos de cada jugadora</h4>
+      <div id="recMins"></div>
+      <h4>Cinco inicial</h4>
+      <div id="recStarters"></div>
+    </div>
+    <div data-rectab="eventos" hidden>
+      <p class="hint">Goles, faltas, FD / penaltis y tarjetas. «Corregir» cambia el minuto, la jugadora, el tipo…</p>
+      <button type="button" id="recAddEv" class="ghost add-past">＋ Añadir evento</button>
+      <div id="recEvents"></div>
+    </div>
+    </div>
     <div class="dlg-actions">
       <button type="button" id="recCancel" class="ghost">Cancelar</button>
       <button type="button" id="recSave" class="primary">Guardar</button>

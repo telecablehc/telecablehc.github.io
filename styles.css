@@ -556,6 +556,15 @@ dialog.draw-dialog { width: min(1100px, calc(100vw - 12px)); max-height: 96vh; p
 /* Teclados de "Marcar acción" */
 .va-kb-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -2px 0 8px; font-size: 14px; color: var(--muted); }
 .va-kb-bar b { color: var(--text); }
+dialog.edit-rec { width: min(760px, calc(100vw - 16px)); }
+.edit-rec #recTabs { margin-bottom: 10px; }
+.rec-scroll { max-height: calc(88vh - 170px); max-height: calc(88dvh - 170px); overflow-y: auto; }
+.rec-time { width: 72px; padding: 8px 6px; font-size: 16px; text-align: center; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font-variant-numeric: tabular-nums; }
+.rec-time.bad { border-color: #d64545; background: rgba(214,69,69,.12); }
+#recMins td:last-child { font-weight: 700; font-variant-numeric: tabular-nums; }
+.small-pick { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); margin-bottom: 10px; }
+.small-pick .pick-btn b { font-size: 18px; }
+#recEvents .ev { gap: 6px; }
 .va-stat { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; margin: 0 0 10px; font-size: 14px; }
 .va-stat label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .va-stat input { width: 20px; height: 20px; }

@@ -354,6 +354,24 @@ async function addStatMark(tipo, t, btn) {
   toast(`Sumado al partido: ${res.txt}`);
 }
 
+// Tras corregir un partido guardado (app.js), las acciones del vídeo unidas a sus eventos se ponen al día
+function syncVideoStats(orig, X) {
+  loadVideos().forEach((v) => {
+    let changed = false;
+    v.marcas.forEach((m) => {
+      if (!m.stat || m.stat.rec !== X.id) return;
+      const main = m.stat.ids.map((id) => X.events.find((e) => e.id === id)).filter((e) => e && !e.bpId);
+      if (!main.length) { delete m.stat; changed = true; return; }
+      const ids = [...main, ...X.events.filter((e) => e.bpId && main.some((x) => x.id === e.bpId))].map((e) => e.id);
+      if (ids.join() !== m.stat.ids.join() || main[0].part !== m.stat.part || main[0].t !== m.stat.ms) {
+        m.stat = { ...m.stat, ids, part: main[0].part, ms: main[0].t };
+        changed = true;
+      }
+    });
+    if (changed) saveVideo(v);
+  });
+}
+
 function filteredMarks(v) {
   return v.marcas.filter((m) =>
     (vaFilter.tipo === 'todos' || (vaFilter.tipo === 'dibujos' ? !!m.dibujo : m.tipo === vaFilter.tipo && !m.dibujo)) &&

@@ -95,8 +95,8 @@ const save = () => { store(KEY_SESSION, S); cloudSessionChanged(); };
 
 // Jugadoras añadidas a la plantilla después de crear la sesión guardada
 PLAYERS.forEach((p, i) => {
-  if (S.players.some((x) => x.num === p.num)) return;
   const nParts = S.partMs.length;
+  if (S.players.some((x) => x.num === p.num)) return;
   S.players.splice(i, 0, {
     ...p, called: S.mode === 'entreno', on: false,
     ms: Array(nParts).fill(0), since: 0, stints: [],
@@ -556,7 +556,9 @@ function ask(title, fields, initial = {}) {
           const grid = document.createElement('div');
           grid.className = 'pick';
           // all: toda la plantilla (p. ej. en el análisis de vídeo); si no, solo las convocadas, primero las de pista
-          const list = f.all
+          const list = f.players
+            ? f.players.map((p) => ({ ...p, on: false }))
+            : f.all
             ? rosterOrder(PLAYERS.map((p) => ({ ...p, on: false })))
             : S.players.filter((p) => p.called).sort((a, b) => b.on - a.on);
           list.forEach((p) => {
@@ -1213,7 +1215,7 @@ function summaryHtml(X) {
     called.map((p) => tr([
       p.num, e(p.name),
       ...parts.flatMap((i) => [
-        p.stints.filter((s) => s.part === i + 1)
+        p.msManual && p.msManual[i] ? '<small>corregido a mano</small>' : p.stints.filter((s) => s.part === i + 1)
           .map((s) => `${fmt(s.in)} – ${s.out == null ? '…' : fmt(s.out)}`).join('<br>') || '—',
         fmt(p.ms[i] || 0),
       ]),
@@ -1366,41 +1368,283 @@ function showRecord(rec) {
 
 // ---------- Corregir partidos terminados ----------
 
-// 1) Editar datos: info, observaciones y convocatoria (no toca las estadísticas)
+// 1) Editar datos: todo el partido guardado (datos, convocatoria, minutos, posesión, cinco inicial y eventos).
+// Se trabaja sobre una copia; nada cambia hasta pulsar "Guardar".
+
+// "12:30", "12.30", "12,30" o "12" (minutos) → ms; '' → 0; si no se entiende, null
+function parseClock(text) {
+  const t = String(text ?? '').trim();
+  if (!t) return 0;
+  const m = t.match(/^(\d{1,3})(?:[:.,'](\d{1,2}))?$/);
+  if (!m || +(m[2] || 0) >= 60) return null;
+  return (+m[1] * 60 + +(m[2] || 0)) * 1000;
+}
+
+// Parte + minuto de un tiempo absoluto en un partido guardado
+function absToPartOf(X, abs) {
+  let cum = 0;
+  for (let i = 0; i < X.partMs.length; i++) {
+    if (abs <= cum + X.partMs[i] || i === X.partMs.length - 1) return { part: i + 1, t: abs - cum };
+    cum += X.partMs[i];
+  }
+  return { part: 1, t: abs };
+}
+
+// Recalcula tiempos absolutos, orden y marcadores de las sanciones (tras cambiar partes o eventos)
+function refreshRecordEvents(X, newSanctions = []) {
+  const start = (part) => sum(X.partMs.slice(0, part - 1));
+  const total = sum(X.partMs);
+  X.events.forEach((e) => {
+    e.abs = start(e.part) + e.t;
+    if (e.type === 'sancion' && e.endPart != null && !newSanctions.includes(e.id)) e.endAbs = start(e.endPart) + e.endT;
+  });
+  X.events = X.events.map((e, i) => [e, i]).sort((p, q) => p[0].abs - q[0].abs || p[1] - q[1]).map((p) => p[0]);
+  const goalsUntil = (lim, incl) => X.events.filter((g) => g.type === 'gol' && (incl ? g.abs <= lim : g.abs < lim));
+  const sc = (list) => [list.filter((g) => g.side === 'favor').length, list.filter((g) => g.side === 'contra').length];
+  X.events.filter((e) => e.type === 'sancion').forEach((e) => {
+    if (newSanctions.includes(e.id)) {
+      const end = Math.min(e.abs + e.dur, total);
+      const pt = absToPartOf(X, end);
+      Object.assign(e, { endAbs: end, endPart: pt.part, endT: pt.t });
+    }
+    e.scoreStart = sc(goalsUntil(e.abs, false));
+    if (e.endAbs != null) e.scoreEnd = sc(goalsUntil(e.endAbs, true));
+  });
+}
+
+// Tipo de "añadir con minuto" y valores iniciales a partir de un evento guardado
+function eventToForm(X, e) {
+  const base = { part: e.part, min: fmt(e.t), num: e.num ?? null, rival: e.rival || '' };
+  switch (e.type) {
+    case 'gol': return { ...base, type: e.side === 'favor' ? 'golFavor' : 'golContra' };
+    case 'falta': return { ...base, type: e.side === 'nuestra' ? 'faltaNuestra' : 'faltaRival' };
+    case 'bp': return { ...base, type: 'bp', kind: e.kind, side: e.side, res: e.scored ? 'gol' : 'fallo' };
+    case 'sancion': return { ...base, type: 'tarjeta', team: e.side, card: e.card };
+  }
+  return base;
+}
+
 function editRecord(rec) {
+  if (isStarted() && S.reopenedFrom === rec.id) {
+    alert('Este partido está reabierto en la pantalla de juego. Termina o descarta esa corrección antes de editarlo aquí.');
+    return;
+  }
   const dlg = $('dlgEditRec');
-  dlg.querySelectorAll('[data-rec]').forEach((el) => (el.value = rec.info[el.dataset.rec] || ''));
-  const called = new Set(rec.players.filter((p) => p.called).map((p) => p.num));
-  const played = new Set(rec.players.filter((p) => sum(p.ms) > 0).map((p) => p.num));
-  const limit = rec.mode === 'partido' ? MAX_CALLED : rec.players.length;
-  const draw = () => {
-    $('recSquad').replaceChildren(...rosterOrder(rec.players).map((p) => {
+  const X = JSON.parse(JSON.stringify(rec));
+  const orig = JSON.parse(JSON.stringify(rec));
+  X.players.forEach((p) => { while (p.ms.length < X.partMs.length) p.ms.push(0); });
+  while (X.possMs.length < X.partMs.length) X.possMs.push([0, 0]);
+  X.starters = X.starters || [];
+  const nParts = X.partMs.length;
+  const called = new Set(X.players.filter((p) => p.called).map((p) => p.num));
+  const limit = X.mode === 'partido' ? MAX_CALLED : X.players.length;
+  const bad = new Set(); // campos de tiempo mal escritos
+  const editedSanctions = [];
+  let tab = 'datos';
+
+  dlg.querySelectorAll('[data-rec]').forEach((el) => (el.value = X.info[el.dataset.rec] || ''));
+
+  const timeInput = (ms, key, onset) => {
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.inputMode = 'decimal';
+    inp.className = 'rec-time';
+    inp.value = fmt(ms);
+    inp.oninput = () => {
+      const v = parseClock(inp.value);
+      inp.classList.toggle('bad', v == null);
+      if (v == null) bad.add(key); else { bad.delete(key); onset(v); }
+    };
+    return inp;
+  };
+  const cell = (tag, content) => { const c = document.createElement(tag); if (content instanceof Node) c.append(content); else c.textContent = content ?? ''; return c; };
+  const tableOf = (head, rows) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'tbl';
+    const t = document.createElement('table');
+    const th = document.createElement('tr');
+    head.forEach((h) => th.append(cell('th', h)));
+    t.append(th, ...rows);
+    wrap.append(t);
+    return wrap;
+  };
+
+  function drawSquad() {
+    const playedNums = new Set(X.players.filter((p) => sum(p.ms) > 0).map((p) => p.num));
+    $('recSquad').replaceChildren(...rosterOrder(X.players).map((p) => {
       const b = document.createElement('button');
       b.type = 'button';
       const sel = called.has(p.num);
       b.className = 'pick-btn' + (sel ? ' active' : '');
-      b.disabled = (sel && played.has(p.num)) || (!sel && called.size >= limit);
+      b.disabled = (sel && playedNums.has(p.num)) || (!sel && called.size >= limit);
       b.innerHTML = `<b>${p.num}</b><span></span>`;
       b.querySelector('span').textContent = p.name;
-      b.onclick = () => { sel ? called.delete(p.num) : called.add(p.num); draw(); };
+      b.onclick = () => { sel ? called.delete(p.num) : called.add(p.num); drawSquad(); };
       return b;
     }));
-  };
-  draw();
+  }
+
+  function drawTimes() {
+    const parts = [...Array(nParts).keys()];
+    // partes y posesión
+    $('recParts').replaceChildren(tableOf(['Parte', 'Jugado', 'Posesión nuestra', 'Posesión rival'],
+      parts.map((i) => {
+        const r = document.createElement('tr');
+        r.append(cell('td', partName(X, i + 1)),
+          cell('td', timeInput(X.partMs[i], 'part' + i, (v) => (X.partMs[i] = v))),
+          cell('td', timeInput(X.possMs[i][0], 'pu' + i, (v) => (X.possMs[i][0] = v))),
+          cell('td', timeInput(X.possMs[i][1], 'pt' + i, (v) => (X.possMs[i][1] = v))));
+        return r;
+      })));
+    // minutos de cada jugadora
+    const list = rosterOrder(X.players.filter((p) => called.has(p.num) || sum(p.ms) > 0));
+    $('recMins').replaceChildren(tableOf(['Jugadora', ...parts.map((i) => partShort(i + 1)), 'Total'],
+      list.map((p) => {
+        const r = document.createElement('tr');
+        const total = cell('td', fmt(sum(p.ms)));
+        r.append(cell('td', `#${p.num} ${p.name}`),
+          ...parts.map((i) => cell('td', timeInput(p.ms[i] || 0, `p${p.num}-${i}`, (v) => { p.ms[i] = v; total.textContent = fmt(sum(p.ms)); }))),
+          total);
+        return r;
+      })));
+    // cinco inicial
+    $('recStarters').replaceChildren(...parts.map((i) => {
+      const box = document.createElement('div');
+      box.append(cell('div', `${partName(X, i + 1)} (máx. ${MAX_ON_COURT})`));
+      box.firstChild.className = 'ask-label';
+      const grid = document.createElement('div');
+      grid.className = 'pick small-pick';
+      const cur = new Set(X.starters[i] || []);
+      rosterOrder(X.players.filter((p) => called.has(p.num))).forEach((p) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        const sel = cur.has(p.num);
+        b.className = 'pick-btn' + (sel ? ' active' : '');
+        b.disabled = !sel && cur.size >= MAX_ON_COURT;
+        b.innerHTML = `<b>${p.num}</b><span></span>`;
+        b.querySelector('span').textContent = p.name;
+        b.onclick = () => {
+          sel ? cur.delete(p.num) : cur.add(p.num);
+          X.starters[i] = rosterOrder(X.players.filter((x) => cur.has(x.num))).map((x) => x.num);
+          drawTimes();
+        };
+        grid.append(b);
+      });
+      box.append(grid);
+      return box;
+    }));
+  }
+
+  // Añadir o corregir un evento (mismas preguntas que "Añadir evento con minuto")
+  async function editEvent(old = null) {
+    const main = old && old.bpId ? X.events.find((x) => x.id === old.bpId) || old : old;
+    const players = rosterOrder(X.players.filter((p) => called.has(p.num)));
+    const v = await ask(main ? 'Corregir evento' : 'Añadir evento', pastEventFields(X, players),
+      main ? { kind: 'fd', side: 'favor', res: 'gol', team: 'nuestra', card: 'azul', ...eventToForm(X, main) }
+        : { type: 'golFavor', part: 1, side: 'favor', kind: 'fd', res: 'gol', team: 'nuestra', card: 'azul' });
+    if (!v) return;
+    const part = +v.part;
+    const t = parseMinute(v.min);
+    if (t == null) return alert('Escribe el minuto como 12:30 (minutos:segundos) o solo los minutos (12).');
+    if (t > X.partMs[part - 1]) return alert(`La ${partName(X, part)} dura ${fmt(X.partMs[part - 1])} (cámbialo en «Minutos» si está mal).`);
+    // se quitan el evento antiguo y su gol / lanzamiento unido; los nuevos conservan los ids
+    let keepGoal = null;
+    if (main) {
+      keepGoal = X.events.find((x) => x.bpId === main.id) || null;
+      X.events = X.events.filter((x) => x.id !== main.id && x.bpId !== main.id);
+    }
+    const evs = buildPastEvents(X, v, part, t);
+    if (main) {
+      evs[0].id = main.id;
+      if (main.video) evs.forEach((e) => (e.video = true));
+      const g = evs.find((e) => e.bpId);
+      if (g && keepGoal) { g.id = keepGoal.id; }
+      if (g) g.bpId = evs[0].id;
+    }
+    evs.filter((e) => e.type === 'sancion').forEach((e) => editedSanctions.push(e.id));
+    insertByTime(X, evs);
+    refreshRecordEvents(X, editedSanctions);
+    drawEvents();
+  }
+
+  function drawEvents() {
+    const list = X.events.filter((e) => !e.bpId); // el gol de una FD/penalti va con su lanzamiento
+    $('recEvents').replaceChildren(...(list.length ? list.map((e) => {
+      const row = document.createElement('div');
+      row.className = `ev ev-${e.type} ev-${e.side}`;
+      const time = cell('span', when(e.part, e.t));
+      time.className = 'ev-time';
+      const text = cell('span', describe(X, e) + (e.video ? ' · 📊 vídeo' : ''));
+      text.className = 'ev-text';
+      const ed = cell('button', 'Corregir');
+      ed.type = 'button';
+      ed.className = 'ghost small';
+      ed.onclick = () => editEvent(e);
+      const del = cell('button', 'Borrar');
+      del.type = 'button';
+      del.className = 'ghost danger small';
+      del.onclick = () => {
+        if (!confirm(`¿Borrar «${describe(X, e)}»?`)) return;
+        X.events = X.events.filter((x) => x.id !== e.id && x.bpId !== e.id && x.id !== e.bpId);
+        refreshRecordEvents(X, editedSanctions);
+        drawEvents();
+      };
+      row.append(time, text, ed, del);
+      return row;
+    }) : [Object.assign(document.createElement('p'), { className: 'hint', textContent: 'Sin eventos.' })]));
+  }
+
+  function showRecTab(name) {
+    tab = name;
+    $('recTabs').querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.t === name));
+    dlg.querySelectorAll('[data-rectab]').forEach((el) => (el.hidden = el.dataset.rectab !== name));
+    if (name === 'datos') drawSquad();
+    if (name === 'tiempos') drawTimes();
+    if (name === 'eventos') drawEvents();
+  }
+  $('recTabs').querySelectorAll('button').forEach((b) => (b.onclick = () => showRecTab(b.dataset.t)));
+  $('recAddEv').onclick = () => editEvent(null);
+  showRecTab('datos');
+  dlg.querySelector('.rec-scroll').scrollTop = 0;
+
   $('recCancel').onclick = () => dlg.close();
   $('recSave').onclick = () => {
+    if (bad.size) return alert('Hay tiempos mal escritos (en rojo, pestaña «Minutos»). Escríbelos como 12:30.');
+    const parts = [...Array(nParts).keys()];
+    for (const i of parts) {
+      const pn = partName(X, i + 1);
+      if (X.possMs[i][0] + X.possMs[i][1] > X.partMs[i]) return alert(`${pn}: la posesión (nuestra + rival) es mayor que el tiempo jugado.`);
+      const over = X.players.find((p) => (p.ms[i] || 0) > X.partMs[i]);
+      if (over) return alert(`#${over.num} ${over.name}: en la ${pn} tiene más minutos que la duración de la parte.`);
+      const late = X.events.find((e) => e.part === i + 1 && e.t > X.partMs[i]);
+      if (late) return alert(`«${describe(X, late)}» (${when(late.part, late.t)}) queda después del final de la ${pn}. Corrige el evento o la duración.`);
+    }
+    const unCalled = X.players.find((p) => sum(p.ms) > 0 && !called.has(p.num));
+    if (unCalled) return alert(`#${unCalled.num} ${unCalled.name} tiene minutos pero no está convocada.`);
+
+    dlg.querySelectorAll('[data-rec]').forEach((el) => (X.info[el.dataset.rec] = el.value));
+    X.players.forEach((p) => {
+      p.called = called.has(p.num);
+      // minutos cambiados a mano: el resumen lo indica (las entradas/salidas ya no cuadran)
+      const o = orig.players.find((x) => x.num === p.num);
+      parts.forEach((i) => {
+        if (fmt(p.ms[i] || 0) !== fmt((o && o.ms[i]) || 0)) { p.msManual = p.msManual || []; p.msManual[i] = true; }
+      });
+    });
+    refreshRecordEvents(X, editedSanctions);
+    X.editedAt = new Date().toISOString();
+
     const history = load(KEY_HISTORY, []);
-    const r = history.find((x) => x.id === rec.id);
-    if (!r) return dlg.close();
-    dlg.querySelectorAll('[data-rec]').forEach((el) => (r.info[el.dataset.rec] = el.value));
-    r.players.forEach((p) => (p.called = called.has(p.num)));
-    r.editedAt = new Date().toISOString();
+    const idx = history.findIndex((x) => x.id === rec.id);
+    if (idx < 0) return dlg.close();
+    history[idx] = X;
     store(KEY_HISTORY, history);
-    cloudMarkDirty(r.id);
+    cloudMarkDirty(X.id);
+    if (typeof syncVideoStats === 'function') syncVideoStats(orig, X);
     dlg.close();
-    showRecord(r); // refresca el resumen abierto
+    showRecord(X); // refresca el resumen abierto
     render();
-    toast('Datos guardados');
+    toast('Partido guardado');
   };
   dlg.showModal();
 }
@@ -1497,12 +1741,18 @@ function insertByTime(X, evs) {
 
 async function addPastEvent() {
   commit();
-  const nParts = S.partMs.length;
-  const v = await ask('Añadir evento con minuto', [
+  const v = await ask('Añadir evento con minuto', pastEventFields(S, null), { type: 'golFavor', part: S.part, side: 'favor', kind: 'fd', team: 'nuestra', card: 'azul' });
+  if (!v) return;
+  return addPastEventFrom(v);
+}
+
+// Preguntas de "añadir evento con minuto" para el partido X (players: lista para elegir jugadora)
+function pastEventFields(X, players) {
+  return [
     { key: 'type', type: 'seg', label: 'Evento', options: [
       ['golFavor', 'Gol a favor'], ['golContra', 'Gol en contra'], ['faltaNuestra', 'Falta nuestra'],
       ['faltaRival', 'Falta rival'], ['bp', 'FD / Penalti'], ['tarjeta', 'Tarjeta']] },
-    { key: 'part', type: 'seg', label: 'Parte', options: S.partMs.map((_, i) => [i + 1, partName(S, i + 1)]) },
+    { key: 'part', type: 'seg', label: 'Parte', options: X.partMs.map((_, i) => [i + 1, partName(X, i + 1)]) },
     { key: 'min', type: 'num', label: 'Minuto de la parte (minutos:segundos)', required: true, placeholder: '12:30' },
     { key: 'kind', type: 'seg', label: 'Tipo', options: [['fd', 'Falta directa'], ['penalti', 'Penalti']], show: (x) => x.type === 'bp' },
     { key: 'side', type: 'seg', label: 'Para', options: [['favor', 'A favor'], ['contra', 'En contra']], show: (x) => x.type === 'bp' },
@@ -1511,11 +1761,12 @@ async function addPastEvent() {
     { key: 'card', type: 'seg', label: 'Tarjeta', options: [['azul', `Azul (${CARDS.azul.min}')`], ['roja', `Roja (${CARDS.roja.min}')`]], show: (x) => x.type === 'tarjeta' },
     { key: 'rival', type: 'num', label: 'Nº de la rival (opcional)',
       show: (x) => x.type === 'golContra' || (x.type === 'bp' && x.side === 'contra') || (x.type === 'tarjeta' && x.team === 'rival') },
-    { key: 'num', type: 'player', label: 'Jugadora',
+    { key: 'num', type: 'player', label: 'Jugadora', players,
       show: (x) => ['golFavor', 'faltaNuestra'].includes(x.type) || (x.type === 'bp' && x.side === 'favor') || (x.type === 'tarjeta' && x.team === 'nuestra') },
-  ], { type: 'golFavor', part: S.part, side: 'favor', kind: 'fd', team: 'nuestra', card: 'azul' });
-  if (!v) return;
+  ];
+}
 
+function addPastEventFrom(v) {
   const part = +v.part;
   const t = parseMinute(v.min);
   const partLen = part === S.part ? partNow() : S.partMs[part - 1];

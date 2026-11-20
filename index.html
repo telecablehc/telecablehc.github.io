@@ -121,6 +121,13 @@
           <p id="vaPickText" class="hint"></p>
           <label class="primary file-btn">Elegir archivo de vídeo<input type="file" id="vaFile" accept="video/*" hidden></label>
         </div>
+        <div id="vaStreamBox" class="va-pick" hidden>
+          <p id="vaStreamText" class="hint"></p>
+          <div class="row-btns">
+            <button id="vaStreamRetry" class="primary" hidden>Reintentar</button>
+            <a id="vaStreamLink" class="ghost file-btn" target="_blank" rel="noopener">Abrir en tiivii ↗</a>
+          </div>
+        </div>
         <div id="vaStage" class="va-stage" hidden>
           <video id="vaVideo" playsinline preload="metadata"></video>
           <svg id="vaOverlay" class="va-overlay" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -221,9 +228,10 @@
       <div class="ask-label">¿De dónde es el vídeo?</div>
       <div class="seg wide" id="dvFuente">
         <button type="button" data-f="archivo">Archivo (tablet / ordenador)</button>
+        <button type="button" data-f="tiivii">Enlace (tiivii)</button>
         <button type="button" data-f="okliga">OK Liga TV</button>
       </div>
-      <label class="field-col" id="dvUrlWrap">Enlace del partido en OK Liga TV
+      <label class="field-col" id="dvUrlWrap"><span id="dvUrlLabel">Enlace del partido en OK Liga TV</span>
         <input id="dvUrl" type="url" placeholder="https://www.okliga.tv/…">
       </label>
       <label class="field-col" id="dvKbWrap">Teclado para marcar acciones
@@ -521,6 +529,7 @@
   <script src="cloud.js"></script>
   <script src="calendar.js"></script>
   <script src="entrenos.js"></script>
+  <script src="hls.min.js"></script>
   <script src="video.js"></script>
   <script src="app.js"></script>
 </body>

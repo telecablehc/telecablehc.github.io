@@ -6,6 +6,8 @@
 // Fuentes:
 // - Archivo del tablet/ordenador: todo funciona. El archivo NO se sube a la nube (es muy grande):
 //   en cada sesión se vuelve a elegir; las marcas, clips y dibujos sí se sincronizan.
+// - Enlace de tiivii (p. ej. https://kennicut.tiivii.com/player/2204): el vídeo es público y se reproduce
+//   dentro de la app (hls.js), con todo como un archivo; solo se guarda el enlace (se sincroniza).
 // - OK Liga TV: la plataforma no deja que otra app controle su vídeo. Se guarda el enlace y se usa
 //   un cronómetro sincronizado a mano para marcar; ver/dibujar/descargar clips necesita el archivo.
 // Usa funciones de app.js / entrenos.js solo en tiempo de ejecución.
@@ -51,7 +53,9 @@ const DRAW_COLORS = ['#ff3b30', '#ffd60a', '#ffffff', '#0a84ff', '#30d158'];
 let currentVideoId = null;
 let vaTab = 'marks';
 let vaFilter = { tipo: 'todos', num: 'todas', tema: 'todos' };
-const loadedFiles = {}; // id del análisis → { url, name, size } (solo en esta sesión)
+const loadedFiles = {}; // id del análisis → { url, name, size } o { url, stream: true } (solo en esta sesión)
+const streamState = {}; // id del análisis → { loading, error } al buscar el vídeo de un enlace
+let hls = null;         // reproductor HLS (enlaces de tiivii)
 let vaClock = { running: false, base: 0, since: 0 }; // cronómetro (OK Liga TV)
 let vaClipStart = null;  // inicio de un clip que se está creando
 let vaPlaylist = null;   // reproducción de una lista de tramos
@@ -65,7 +69,64 @@ const loadVideos = () => load(KEY_VIDEOS, []);
 const findVideo = (id) => loadVideos().find((v) => v.id === id) || null;
 const saveVideo = (v) => upsert(KEY_VIDEOS, 'video', v);
 const curVideo = () => findVideo(currentVideoId);
-const isFileSource = (v) => v.fuente === 'archivo';
+// ¿El vídeo se ve dentro de la app? (archivo o enlace de tiivii; OK Liga TV no)
+const playsInApp = (v) => v.fuente === 'archivo' || v.fuente === 'tiivii';
+const SOURCE_NAME = { archivo: 'Archivo de vídeo', tiivii: 'Enlace (tiivii)', okliga: 'OK Liga TV' };
+const notLoaded = (v) => alert(v.fuente === 'tiivii' ? 'El vídeo del enlace aún no se ha cargado.' : 'Primero elige el archivo de vídeo.');
+
+// ---------- Enlaces de tiivii ----------
+// https://<club>.tiivii.com/player/<n> → página pública del reproductor → enlace del vídeo (.m3u8)
+const TIIVII_RE = /^https:\/\/([a-z0-9-]+)\.tiivii\.(?:com|tv)\/(?:[a-z]{2}\/)?(?:player|videodetail)\/(\d+)/i;
+
+async function resolveTiivii(link) {
+  const m = String(link || '').match(TIIVII_RE);
+  if (!m) throw new Error('El enlace no es de tiivii (https://….tiivii.com/player/…).');
+  const res = await fetch(`https://streamer-cdn.ott.tiivii.com/v1/player/${m[1].toLowerCase()}/${m[2]}?detail=true`);
+  if (!res.ok) throw new Error(`No se ha podido abrir ese enlace en tiivii (error ${res.status}). Comprueba que es correcto y que el vídeo se ve sin iniciar sesión.`);
+  const html = await res.text();
+  const src = (html.match(/videoURLoriginal\s*=\s*"(https:[^"]+\.m3u8[^"]*)"/) || html.match(/"(https:\/\/[^"]+-vod-[^"]+\.m3u8[^"]*)"/) || [])[1];
+  if (!src) throw new Error('No se encuentra el vídeo en ese enlace (¿pide iniciar sesión o aún no está publicado?).');
+  return src;
+}
+
+async function loadStream(v) {
+  if (streamState[v.id] && streamState[v.id].loading) return;
+  streamState[v.id] = { loading: true };
+  renderAnalysis();
+  try {
+    const url = await resolveTiivii(v.url);
+    loadedFiles[v.id] = { url, stream: true, link: v.url };
+    streamState[v.id] = {};
+  } catch (err) {
+    streamState[v.id] = { error: navigator.onLine ? err.message : 'Sin conexión: el vídeo del enlace necesita internet.' };
+  }
+  if (curVideo() && curVideo().id === v.id) renderAnalysis();
+}
+
+// Pone en el reproductor un archivo (blob) o un vídeo HLS
+function attachSource(loaded) {
+  const video = vid();
+  if (video.dataset.src === loaded.url) return;
+  if (hls) { hls.destroy(); hls = null; }
+  video.dataset.src = loaded.url;
+  if (!loaded.stream) { video.removeAttribute('crossorigin'); video.src = loaded.url; return; }
+  video.crossOrigin = 'anonymous'; // permite grabar clips del vídeo (el servidor lo autoriza)
+  if (window.Hls && Hls.isSupported()) {
+    hls = new Hls({ maxBufferLength: 30 });
+    hls.on(Hls.Events.ERROR, (_, data) => {
+      if (!data.fatal) return;
+      if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+      else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+      else toast('Error al reproducir el vídeo del enlace');
+    });
+    hls.loadSource(loaded.url);
+    hls.attachMedia(video);
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    video.src = loaded.url; // Safari (iPhone / iPad) reproduce HLS directamente
+  } else {
+    toast('Este navegador no puede reproducir el vídeo del enlace');
+  }
+}
 
 function updateVideo(fn) {
   const v = curVideo();
@@ -93,10 +154,10 @@ function renderVideoList() {
     const b = document.createElement('button');
     b.className = 'fixture';
     b.innerHTML = '<span class="fx-j"></span><span class="fx-main"><b></b><small></small></span><span class="fx-state"></span>';
-    b.querySelector('.fx-j').textContent = v.fuente === 'okliga' ? '📺' : '🎞️';
+    b.querySelector('.fx-j').textContent = { okliga: '📺', tiivii: '🔗' }[v.fuente] || '🎞️';
     b.querySelector('b').textContent = v.titulo || 'Análisis';
     const fecha = v.fecha ? v.fecha.split('-').reverse().join('/') : '';
-    b.querySelector('small').textContent = `${fecha}${fecha ? ' · ' : ''}${v.fuente === 'okliga' ? 'OK Liga TV' : 'Archivo'}`;
+    b.querySelector('small').textContent = `${fecha}${fecha ? ' · ' : ''}${{ okliga: 'OK Liga TV', tiivii: 'Enlace (tiivii)' }[v.fuente] || 'Archivo'}`;
     const nDraw = v.marcas.filter((m) => m.dibujo).length;
     b.querySelector('.fx-state').textContent =
       `${v.marcas.length - nDraw} acciones · ${v.clips.length} clips${nDraw ? ` · ${nDraw} dibujos` : ''}`;
@@ -138,7 +199,9 @@ function openVideoDialog(existing = null) {
   };
   const drawFuente = () => {
     $('dvFuente').querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.f === v.fuente));
-    $('dvUrlWrap').hidden = v.fuente !== 'okliga';
+    $('dvUrlWrap').hidden = v.fuente === 'archivo';
+    $('dvUrlLabel').textContent = v.fuente === 'tiivii' ? 'Enlace del vídeo en tiivii (uno por partido)' : 'Enlace del partido en OK Liga TV';
+    $('dvUrl').placeholder = v.fuente === 'tiivii' ? 'https://kennicut.tiivii.com/player/…' : 'https://www.okliga.tv/…';
   };
   $('dvFuente').querySelectorAll('button').forEach((b) => (b.onclick = () => { v.fuente = b.dataset.f; drawFuente(); }));
   drawFuente();
@@ -163,6 +226,13 @@ function openVideoDialog(existing = null) {
       alert('El enlace debe ser de OK Liga TV (https://www.okliga.tv/…).');
       return;
     }
+    if (v.fuente === 'tiivii' && !TIIVII_RE.test(v.url)) {
+      alert('Pega el enlace del vídeo en tiivii, por ejemplo https://kennicut.tiivii.com/player/2204');
+      return;
+    }
+    // si cambia el enlace o la fuente, se vuelve a cargar el vídeo
+    const lf = loadedFiles[v.id];
+    if (lf && (lf.stream ? v.fuente !== 'tiivii' || lf.link !== v.url : v.fuente !== 'archivo')) { delete loadedFiles[v.id]; delete streamState[v.id]; }
     saveVideo(v);
     $('dlgVideo').close();
     if (existing) renderAnalysis(); else go('analisis/' + v.id);
@@ -177,7 +247,7 @@ const vid = () => $('vaVideo');
 // Tiempo actual (del vídeo o del cronómetro de OK Liga TV), en segundos
 function vaNow() {
   const v = curVideo();
-  if (v && isFileSource(v)) return vid().currentTime || 0;
+  if (v && playsInApp(v)) return vid().currentTime || 0;
   return vaClock.base + (vaClock.running ? (performance.now() - vaClock.since) / 1000 : 0);
 }
 
@@ -196,27 +266,37 @@ function parseVT(text) {
 function renderAnalysis() {
   const v = curVideo();
   if (!v) { location.replace('#video'); return; }
-  const file = isFileSource(v);
+  const file = playsInApp(v);
 
   // Cabecera
   const fecha = v.fecha ? v.fecha.split('-').reverse().join('/') : '';
   $('vaHead').innerHTML = '<div class="va-title"><b></b><small></small></div><button class="ghost small">Editar datos</button>';
   $('vaHead').querySelector('b').textContent = v.titulo;
-  $('vaHead').querySelector('small').textContent = `${fecha}${fecha ? ' · ' : ''}${file ? 'Archivo de vídeo' : 'OK Liga TV'}`;
+  $('vaHead').querySelector('small').textContent = `${fecha}${fecha ? ' · ' : ''}${SOURCE_NAME[v.fuente] || 'Archivo de vídeo'}`;
   $('vaHead').querySelector('button').onclick = () => openVideoDialog(v);
 
   // Fuente
   $('vaFileBox').hidden = !file;
   $('vaTvBox').hidden = file;
   const loaded = loadedFiles[v.id];
+  const stream = v.fuente === 'tiivii';
+  $('vaStreamBox').hidden = !stream || !!loaded;
+  if (stream && !loaded) {
+    const st = streamState[v.id] || {};
+    if (!st.loading && !st.error) setTimeout(() => loadStream(v));
+    $('vaStreamText').textContent = st.error ? '⚠️ ' + st.error : 'Cargando el vídeo del enlace…';
+    $('vaStreamRetry').hidden = !st.error;
+    $('vaStreamRetry').onclick = () => { delete streamState[v.id]; loadStream(v); };
+    $('vaStreamLink').href = v.url || '#';
+  }
   if (file) {
-    $('vaPickFile').hidden = !!loaded;
+    $('vaPickFile').hidden = !!loaded || stream;
     $('vaStage').hidden = !loaded;
     $('vaControls').hidden = !loaded;
     $('vaPickText').textContent = v.archivo
       ? `Elige el archivo «${v.archivo.nombre}» (${(v.archivo.tam / 1048576).toFixed(0)} MB). El vídeo no se sube a la nube; solo las marcas, clips y dibujos.`
       : 'Elige el archivo de vídeo del partido o del entreno. El vídeo no se sube a la nube; solo las marcas, clips y dibujos.';
-    if (loaded && vid().dataset.src !== loaded.url) { vid().src = loaded.url; vid().dataset.src = loaded.url; }
+    if (loaded) attachSource(loaded);
   } else {
     $('vaTvLink').href = v.url || 'https://www.okliga.tv/home';
     $('vaTvLink').textContent = v.url ? 'Abrir el partido en OK Liga TV ↗' : 'Abrir OK Liga TV ↗ (añade el enlace en «Editar datos»)';
@@ -416,13 +496,13 @@ function renderMarks(v) {
   const list = filteredMarks(v);
   const box = $('vaList');
   if (!v.marcas.length) {
-    box.innerHTML = `<p class="hint">${isFileSource(v) ? 'Reproduce el vídeo y pulsa un botón de «Marcar acción» cuando ocurra.' : 'Pon en marcha el cronómetro a la vez que el vídeo de OK Liga TV y pulsa un botón de «Marcar acción» cuando ocurra.'}</p>`;
+    box.innerHTML = `<p class="hint">${playsInApp(v) ? 'Reproduce el vídeo y pulsa un botón de «Marcar acción» cuando ocurra.' : 'Pon en marcha el cronómetro a la vez que el vídeo de OK Liga TV y pulsa un botón de «Marcar acción» cuando ocurra.'}</p>`;
     return;
   }
   const playAll = document.createElement('button');
   playAll.className = 'ghost add-past';
   playAll.textContent = `▶ Ver seguidas (${list.length})`;
-  playAll.hidden = !isFileSource(v) || !loadedFiles[v.id] || !list.length;
+  playAll.hidden = !playsInApp(v) || !loadedFiles[v.id] || !list.length;
   playAll.onclick = () => playSegments(list.map((m) => [Math.max(0, m.t - PRE_ROLL), m.t + (m.dibujo ? 0.1 : POST_ROLL)]));
   box.replaceChildren(playAll, ...list.map((m) => {
     const [, label, color] = markInfo(v, m);
@@ -453,13 +533,13 @@ function renderMarks(v) {
 function jumpTo(t, mark = null) {
   const v = curVideo();
   t = Math.max(0, t);
-  if (!isFileSource(v)) {
+  if (!playsInApp(v)) {
     vaClock = { running: false, base: t, since: 0 };
     vaTick();
     alert(`Ve al minuto ${fmtVT(t)} en OK Liga TV y pulsa ▶ en los dos a la vez.`);
     return;
   }
-  if (!loadedFiles[v.id]) { alert('Primero elige el archivo de vídeo.'); return; }
+  if (!loadedFiles[v.id]) { notLoaded(v); return; }
   vaPlaylist = null;
   vid().currentTime = t;
   if (mark && mark.dibujo) { vid().pause(); showOverlay(mark.dibujo); }
@@ -526,7 +606,7 @@ function renderClips(v) {
     box.innerHTML = '<p class="hint">Para crear un clip: ve al inicio de la jugada, pulsa «✂️ Crear clip», avanza hasta el final y pulsa «Marcar fin».</p>';
     return;
   }
-  const canPlay = isFileSource(v) && !!loadedFiles[v.id];
+  const canPlay = playsInApp(v) && !!loadedFiles[v.id];
   const groups = {};
   const visible = v.clips.filter((c) => vaFilter.tema === 'todos' || (c.tema || 'Sin tema') === vaFilter.tema);
   visible.forEach((c) => (groups[c.tema || 'Sin tema'] = groups[c.tema || 'Sin tema'] || []).push(c));
@@ -536,9 +616,9 @@ function renderClips(v) {
   const allBtn = Object.assign(document.createElement('button'), {
     className: 'primary', textContent: `⬇ Descargar ${vaFilter.tema === 'todos' ? 'todos' : 'los de «' + vaFilter.tema + '»'} (${visible.length})`,
   });
-  allBtn.onclick = () => (canPlay ? downloadAllClips(Object.values(groups).flat(), allBtn) : alert('Primero elige el archivo de vídeo.'));
+  allBtn.onclick = () => (canPlay ? downloadAllClips(Object.values(groups).flat(), allBtn) : notLoaded(v));
   all.append(allBtn);
-  all.hidden = !isFileSource(v) || !visible.length;
+  all.hidden = !playsInApp(v) || !visible.length;
   box.replaceChildren(all, ...Object.entries(groups).flatMap(([tema, clips]) => {
     const h = document.createElement('h4');
     h.className = 'va-tema';
@@ -558,11 +638,11 @@ function renderClips(v) {
       row.querySelector('small').textContent = `${fmtVT(c.inicio)} – ${fmtVT(c.fin)} · ${Math.round(c.fin - c.inicio)} s${nDraw ? ` · ✏️ ${nDraw} dibujo${nDraw > 1 ? 's' : ''}` : ''}`;
       const play = row.querySelector('.va-c-play');
       if (canPlay) play.onclick = () => playSegments([[c.inicio, c.fin]], true);
-      else if (isFileSource(v)) play.onclick = () => alert('Primero elige el archivo de vídeo.');
+      else if (playsInApp(v)) play.onclick = () => notLoaded(v);
       else { play.textContent = '📺 Ver en OK Liga TV'; play.onclick = () => alert(`Ve a ${fmtVT(c.inicio)} en OK Liga TV (hasta ${fmtVT(c.fin)}).`); }
       const dl = row.querySelector('.va-c-dl');
-      dl.hidden = !isFileSource(v);
-      dl.onclick = () => (canPlay ? downloadClip(c, dl) : alert('Primero elige el archivo de vídeo.'));
+      dl.hidden = !playsInApp(v);
+      dl.onclick = () => (canPlay ? downloadClip(c, dl) : notLoaded(v));
       row.querySelector('.va-c-ed').onclick = async () => {
         const ans = await ask('Editar clip', [
           { key: 'nombre', type: 'num', label: 'Nombre', required: true },
@@ -629,7 +709,7 @@ function showOverlay(dibujo) {
 
 function startDrawing() {
   const v = curVideo();
-  if (!loadedFiles[v.id]) { alert('Primero elige el archivo de vídeo.'); return; }
+  if (!loadedFiles[v.id]) { notLoaded(v); return; }
   vid().pause();
   vaPlaylist = null;
   vaDrawing = { t: vid().currentTime, items: [], tool: 'arrow', color: DRAW_COLORS[0], undo: [], cur: null };
@@ -724,7 +804,7 @@ function endDrawing(saveIt) {
 function vaTick() {
   const v = curVideo();
   if (!v) return;
-  if (isFileSource(v)) {
+  if (playsInApp(v)) {
     const video = vid();
     $('vaTime').textContent = `${fmtVT(video.currentTime)} / ${fmtVT(video.duration || 0)}`;
     $('vaPlay').textContent = video.paused ? '▶' : '❚❚';

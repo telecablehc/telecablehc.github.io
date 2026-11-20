@@ -4,9 +4,9 @@
 // instantánea con o sin red. Para publicar cambios hay que subir la versión
 // de CACHE: el navegador detecta este archivo nuevo, descarga todo en segundo
 // plano y la versión nueva aparece la próxima vez que se abra la app.
-const CACHE = 'hoquei-v29';
+const CACHE = 'hoquei-v30';
 const FILES = [
-  './', './index.html', './styles.css', './app.js', './cloud.js', './calendar.js', './entrenos.js', './video.js', './supabase.min.js', './manifest.webmanifest',
+  './', './index.html', './styles.css', './app.js', './cloud.js', './calendar.js', './entrenos.js', './video.js', './hls.min.js', './supabase.min.js', './manifest.webmanifest',
   './crest.png', './icon-192.png', './icon-512.png', './icon-maskable.png', './apple-touch-icon.png',
 ];
 

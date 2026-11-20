@@ -30,6 +30,11 @@ const STD_KEYBOARD = { nombre: 'Estándar', botones: MARK_TYPES.map(([k, label, 
 const KB_COLORS = ['#1f9d55', '#d64545', '#2f6fdb', '#7b3fe4', '#e07b00', '#14a3a3', '#8a6d3b', '#b8860b', '#5f7d8c', '#e83e8c', '#20c997', '#888888'];
 const loadKeyboards = () => load(KEY_KEYBOARDS, []);
 const keyboardOf = (v) => (v && v.teclado && v.teclado.botones.length ? v.teclado : STD_KEYBOARD);
+const STD_JSON = JSON.stringify(STD_KEYBOARD.botones);
+const isStdKb = (v) => !v || !v.teclado || (!v.tecladoId && JSON.stringify(v.teclado.botones) === STD_JSON);
+// Con el teclado estándar, estas acciones pueden sumar al marcador y la estadística del partido
+const STAT_MARKS = ['golFavor', 'golContra', 'falta', 'bolaParada'];
+const feedsStats = (v) => !!(v && v.alimentar && isStdKb(v) && v.partido);
 const copyKb = (kb) => JSON.parse(JSON.stringify({ nombre: kb.nombre, botones: kb.botones }));
 
 // [clave, nombre, color] de una acción (dibujos aparte)
@@ -139,7 +144,7 @@ function openVideoDialog(existing = null) {
   drawFuente();
   $('dvCancel').onclick = () => $('dlgVideo').close();
   $('dvDelete').onclick = () => {
-    if (!confirm('¿Borrar este análisis con todas sus acciones, clips y dibujos? El archivo de vídeo no se borra.')) return;
+    if (!confirm('¿Borrar este análisis con todas sus acciones, clips y dibujos? El archivo de vídeo no se borra, y lo sumado al marcador del partido tampoco.')) return;
     remove(KEY_VIDEOS, 'video', v.id);
     $('dlgVideo').close();
     go('video');
@@ -233,6 +238,7 @@ function renderAnalysis() {
     return b;
   }));
 
+  renderStatBox(v);
   renderClipBar();
   $('vaTabMarks').classList.toggle('active', vaTab === 'marks');
   $('vaTabClips').classList.toggle('active', vaTab === 'clips');
@@ -242,10 +248,81 @@ function renderAnalysis() {
 
 // ---------- 1) Acciones ----------
 
+// Opción "Sumar al marcador y la estadística del partido" (solo con el teclado estándar)
+function renderStatBox(v) {
+  const std = isStdKb(v);
+  $('vaStatBox').hidden = !std;
+  if (!std) return;
+  const on = feedsStats(v);
+  $('vaStats').checked = on;
+  $('vaStatBox').classList.toggle('on', on);
+  const sc = v.partido ? videoStatScore(v.partido) : null;
+  $('vaStatInfo').textContent = !v.partido
+    ? 'Para usarlo, une el análisis a una jornada en «Editar datos».'
+    : on
+      ? `Gol a favor, Gol en contra, Falta y Bola parada se suman al partido (se pide la parte y el minuto). Marcador guardado: ${sc ? sc.score.join('-') : '0-0'}.`
+      : 'Desactivado: las acciones solo quedan en el análisis.';
+}
+
+function toggleStats() {
+  const v = curVideo();
+  const want = $('vaStats').checked;
+  if (want && !v.partido) {
+    $('vaStats').checked = false;
+    alert('Para sumar al marcador, une primero el análisis a una jornada del calendario en «Editar datos».');
+    return;
+  }
+  if (want) {
+    const sc = videoStatScore(v.partido);
+    if (sc && sc.events && !confirm(`Este partido ya tiene datos guardados (marcador ${sc.score.join('-')}). Las acciones que marques se sumarán a ellos: si ya se apuntaron en directo, saldrán dobles. ¿Activar?`)) {
+      $('vaStats').checked = false;
+      return;
+    }
+  }
+  updateVideo((x) => (x.alimentar = want));
+  toast(want ? 'Las acciones se sumarán al marcador del partido' : 'Las acciones ya no se suman al partido');
+}
+
+// Preguntas para una acción que suma al partido. Devuelve el evento para app.js (addVideoStat) o null.
+function statFields(tipo) {
+  const parts = videoStatParts(curVideo().partido);
+  const when = [
+    { key: 'part', type: 'seg', label: 'Parte del partido', options: parts },
+    { key: 'min', type: 'num', label: 'Minuto de la parte en el marcador (minutos:segundos)', required: true, placeholder: '12:30' },
+  ];
+  const nota = { key: 'nota', type: 'num', label: 'Nota (opcional)', placeholder: 'Ej.: salida por la izquierda' };
+  const rival = (show) => ({ key: 'rival', type: 'num', label: 'Nº de la rival (opcional)', show });
+  switch (tipo) {
+    case 'golFavor': return [nota, ...when, { key: 'num', type: 'player', label: '¿Quién marca?', all: true }];
+    case 'golContra': return [nota, ...when, rival(), { key: 'num', type: 'player', label: 'Jugadora (opcional, solo para el análisis)', all: true, optional: true }];
+    case 'falta': return [
+      { key: 'team', type: 'seg', label: 'Falta de', options: [['nuestra', 'Nuestra'], ['rival', 'Rival']] },
+      nota, ...when, { key: 'num', type: 'player', label: '¿Quién comete la falta?', all: true, show: (x) => x.team === 'nuestra' }];
+    case 'bolaParada': return [
+      { key: 'kind', type: 'seg', label: 'Tipo', options: [['fd', 'Falta directa'], ['penalti', 'Penalti']] },
+      { key: 'side', type: 'seg', label: 'Para', options: [['favor', 'A favor'], ['contra', 'En contra']] },
+      { key: 'res', type: 'seg', label: 'Resultado', options: [['gol', 'Gol'], ['fallo', 'Fallado / parado']] },
+      nota, ...when, rival((x) => x.side === 'contra'),
+      { key: 'num', type: 'player', label: 'Lanzadora', all: true, show: (x) => x.side === 'favor' }];
+  }
+  return null;
+}
+
+function statEvent(tipo, a) {
+  switch (tipo) {
+    case 'golFavor': return { type: 'golFavor', num: a.num };
+    case 'golContra': return { type: 'golContra', rival: a.rival };
+    case 'falta': return a.team === 'nuestra' ? { type: 'faltaNuestra', num: a.num } : { type: 'faltaRival' };
+    case 'bolaParada': return { type: 'bp', kind: a.kind, side: a.side, res: a.res, num: a.side === 'favor' ? a.num : null, rival: a.rival };
+  }
+  return null;
+}
+
 async function addMark(tipo) {
   const t = vaNow();
   const btn = keyboardOf(curVideo()).botones.find((b) => b.k === tipo) || { label: markType(tipo)[1], color: markType(tipo)[2] };
   const label = btn.label;
+  if (feedsStats(curVideo()) && STAT_MARKS.includes(tipo)) return addStatMark(tipo, t, btn);
   // la nota va primero: al tocar la jugadora se guarda directamente
   const ans = await ask(`${label} · ${fmtVT(t)}`, [
     { key: 'nota', type: 'num', label: 'Nota (opcional, escríbela antes de elegir la jugadora)', placeholder: 'Ej.: salida por la izquierda' },
@@ -257,6 +334,24 @@ async function addMark(tipo) {
     x.marcas.sort((a, b) => a.t - b.t);
   });
   toast(`${label} marcado en ${fmtVT(t)}`);
+}
+
+// Acción que además suma al marcador y la estadística del partido
+async function addStatMark(tipo, t, btn) {
+  const v = curVideo();
+  const parts = videoStatParts(v.partido);
+  const ans = await ask(`${btn.label} · ${fmtVT(t)} · suma al partido`, statFields(tipo),
+    { part: parts.some((p) => p[0] === v.ultimaParte) ? v.ultimaParte : 1, team: 'nuestra', kind: 'fd', side: 'favor', res: 'gol' });
+  if (!ans) return;
+  const res = addVideoStat(v.partido, { ...statEvent(tipo, ans), part: ans.part, min: ans.min });
+  if (typeof res === 'string') { alert(res); return; }
+  updateVideo((x) => {
+    x.ultimaParte = res.part;
+    x.marcas.push({ id: uid(), t, tipo, label: btn.label, color: btn.color, num: ans.num || null, nota: ans.nota || '',
+      stat: { rec: res.rec, ids: res.ids, part: res.part, ms: res.t } });
+    x.marcas.sort((a, b) => a.t - b.t);
+  });
+  toast(`Sumado al partido: ${res.txt}`);
 }
 
 function filteredMarks(v) {
@@ -321,9 +416,16 @@ function renderMarks(v) {
     row.querySelector('.va-type').textContent = label;
     row.querySelector('.va-who').textContent = m.num ? playerName(m.num) : '';
     row.querySelector('.va-note').textContent = m.nota || '';
+    if (m.stat) {
+      const s = document.createElement('small');
+      s.className = 'va-statmark';
+      s.textContent = `📊 En el marcador · ${m.stat.part}ªP ${fmt(m.stat.ms)}`;
+      row.querySelector('.va-mark-go').append(s);
+    }
     row.querySelector('.va-mark-go').onclick = () => jumpTo(m.dibujo ? m.t : m.t - PRE_ROLL, m);
     row.querySelector('.danger').onclick = () => {
-      if (!confirm('¿Borrar esta marca?')) return;
+      if (!confirm(m.stat ? '¿Borrar esta marca? También se quita del marcador y la estadística del partido.' : '¿Borrar esta marca?')) return;
+      if (m.stat) { const err = removeVideoStat(m.stat); if (err) { alert(err); return; } }
       updateVideo((x) => (x.marcas = x.marcas.filter((y) => y.id !== m.id)));
     };
     return row;
@@ -900,7 +1002,8 @@ function onFileChosen(file) {
 // ---------- Elegir / editar / guardar teclados ----------
 
 function applyKeyboard(kb, fromId = null) {
-  updateVideo((x) => { x.teclado = copyKb(kb); x.tecladoId = fromId; });
+  // el estándar no se copia: así se sabe que es el estándar (y puede sumar al marcador)
+  updateVideo((x) => { x.teclado = kb === STD_KEYBOARD ? null : copyKb(kb); x.tecladoId = fromId; });
   toast(`Teclado: ${kb.nombre}`);
 }
 
@@ -1021,6 +1124,7 @@ function openKeyboardEditor(kbIn, fromId = null, isNew = false) {
 function initVideo() {
   $('vNew').onclick = () => openVideoDialog();
   $('vaKbChange').onclick = openKeyboardPicker;
+  $('vaStats').onchange = toggleStats;
   $('vaKbEdit').onclick = () => { const v = curVideo(); openKeyboardEditor(keyboardOf(v), v.tecladoId || null); };
   $('vaFile').onchange = (ev) => { const f = ev.target.files[0]; ev.target.value = ''; onFileChosen(f); };
   const video = vid();

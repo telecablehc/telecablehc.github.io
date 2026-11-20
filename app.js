@@ -1451,10 +1451,48 @@ function parseMinute(text) {
 }
 
 // Jugadoras en pista en un momento dado, a partir de sus entradas y salidas
-function onCourtAt(part, t) {
-  return rosterOrder(S.players)
+function onCourtAt(part, t, X = S) {
+  return rosterOrder(X.players)
     .filter((p) => p.stints.some((s) => s.part === part && s.in <= t && (s.out == null ? true : t < s.out)))
     .map((p) => p.num);
+}
+
+// Eventos de "añadir con minuto" para el partido X (el de la pantalla de juego o uno guardado).
+// v: { type: golFavor | golContra | faltaNuestra | faltaRival | bp | tarjeta, num, rival, kind, side, res, team, card }
+function buildPastEvents(X, v, part, t) {
+  const abs = sum(X.partMs.slice(0, part - 1)) + t;
+  const st = { part, t, abs };
+  const five = onCourtAt(part, t, X);
+  const evs = [];
+  const goal = (side, extra = {}) => ({ id: uid(), type: 'gol', side, via: 'juego', ...st, five, ...extra });
+  switch (v.type) {
+    case 'golFavor': evs.push(goal('favor', { num: v.num })); break;
+    case 'golContra': evs.push(goal('contra', { rival: v.rival || '' })); break;
+    case 'faltaNuestra': evs.push({ id: uid(), type: 'falta', side: 'nuestra', ...st, num: v.num }); break;
+    case 'faltaRival': evs.push({ id: uid(), type: 'falta', side: 'rival', ...st }); break;
+    case 'bp': {
+      const favor = v.side === 'favor';
+      const bp = { id: uid(), type: 'bp', kind: v.kind, side: v.side, scored: v.res === 'gol', ...st,
+        num: favor ? v.num : null, rival: favor ? '' : v.rival || '' };
+      evs.push(bp);
+      if (bp.scored) evs.push(goal(v.side, { via: v.kind, num: bp.num, rival: bp.rival, bpId: bp.id }));
+      break;
+    }
+    case 'tarjeta': {
+      const ours = v.team === 'nuestra';
+      evs.push({ id: uid(), type: 'sancion', side: v.team, card: v.card, dur: CARDS[v.card].min * 60000, ...st,
+        num: ours ? v.num : null, rival: ours ? '' : v.rival || '', five });
+      break;
+    }
+  }
+  return evs;
+}
+
+// Inserta eventos en su sitio, por orden de tiempo, para que los marcadores salgan bien
+function insertByTime(X, evs) {
+  let idx = X.events.findIndex((e) => e.abs > evs[0].abs);
+  if (idx < 0) idx = X.events.length;
+  X.events.splice(idx, 0, ...evs);
 }
 
 async function addPastEvent() {
@@ -1484,37 +1522,10 @@ async function addPastEvent() {
   if (t == null) return alert('Escribe el minuto como 12:30 (minutos:segundos) o solo los minutos (12).');
   if (t > partLen) return alert(`En la ${partName(S, part)} solo se han jugado ${fmt(partLen)}.`);
 
-  const abs = sum(S.partMs.slice(0, part - 1)) + t;
-  const st = { part, t, abs };
-  const five = onCourtAt(part, t);
-  const evs = [];
-  const goal = (side, extra = {}) => ({ id: uid(), type: 'gol', side, via: 'juego', ...st, five, ...extra });
-  switch (v.type) {
-    case 'golFavor': evs.push(goal('favor', { num: v.num })); break;
-    case 'golContra': evs.push(goal('contra', { rival: v.rival || '' })); break;
-    case 'faltaNuestra': evs.push({ id: uid(), type: 'falta', side: 'nuestra', ...st, num: v.num }); break;
-    case 'faltaRival': evs.push({ id: uid(), type: 'falta', side: 'rival', ...st }); break;
-    case 'bp': {
-      const favor = v.side === 'favor';
-      const bp = { id: uid(), type: 'bp', kind: v.kind, side: v.side, scored: v.res === 'gol', ...st,
-        num: favor ? v.num : null, rival: favor ? '' : v.rival || '' };
-      evs.push(bp);
-      if (bp.scored) evs.push(goal(v.side, { via: v.kind, num: bp.num, rival: bp.rival, bpId: bp.id }));
-      break;
-    }
-    case 'tarjeta': {
-      const ours = v.team === 'nuestra';
-      evs.push({ id: uid(), type: 'sancion', side: v.team, card: v.card, dur: CARDS[v.card].min * 60000, ...st,
-        num: ours ? v.num : null, rival: ours ? '' : v.rival || '', five });
-      break;
-    }
-  }
+  const evs = buildPastEvents(S, v, part, t);
 
   action(() => {
-    // se inserta en su sitio, por orden de tiempo, para que los marcadores salgan bien
-    let idx = S.events.findIndex((e) => e.abs > abs);
-    if (idx < 0) idx = S.events.length;
-    S.events.splice(idx, 0, ...evs);
+    insertByTime(S, evs);
     // sanción añadida a posteriori: marcador inicial y final según los goles de ese tramo
     evs.filter((e) => e.type === 'sancion').forEach((e) => {
       const goalsUntil = (lim, incl) => S.events.filter((g) => g.type === 'gol' && (incl ? g.abs <= lim : g.abs < lim));
@@ -1528,6 +1539,90 @@ async function addPastEvent() {
     });
   });
   toast(`Añadido: ${describe(S, evs[evs.length - 1])}`);
+}
+
+// ---------- Acciones del análisis de vídeo que suman al marcador (video.js) ----------
+
+// Partido guardado de una jornada; si no lo hay, se crea uno sin tiempos de juego
+function fixtureRecord(f) {
+  const r = newSession('partido');
+  Object.assign(r.info, {
+    fixtureId: f.id, rival: f.rival, competicion: `${COMPETICION} ${TEMPORADA}`,
+    jornada: String(f.jornada), fecha: f.fecha || today(), hora: f.hora || '', pabellon: f.pabellon || '',
+  });
+  r.squadOk = true;
+  r.part = r.parts;
+  r.partMs = Array(r.parts).fill(r.partLen * 60000);
+  r.possMs = r.partMs.map(() => [0, 0]);
+  r.players.forEach((p) => (p.ms = r.partMs.map(() => 0)));
+  r.desdeVideo = true;
+  r.id = uid();
+  r.savedAt = new Date().toISOString();
+  return r;
+}
+
+// ¿Se puede tocar el partido guardado de esta jornada? (no si está en la pantalla de juego)
+function videoStatBlocked(fixtureId, recId) {
+  if (!isStarted() || S.mode !== 'partido') return '';
+  if (S.info.fixtureId === fixtureId || (recId && S.reopenedFrom === recId)) {
+    return 'Este partido está en curso (o reabierto para corregir) en la pantalla de juego. Termínalo y vuelve a intentarlo.';
+  }
+  return '';
+}
+
+// Partes que se pueden elegir para una jornada
+function videoStatParts(fixtureId) {
+  const f = CALENDARIO.find((x) => x.id === fixtureId);
+  const rec = f && recordForFixture(f, load(KEY_HISTORY, []));
+  const X = rec || newSession('partido');
+  const n = rec ? Math.max(rec.partMs.length, rec.parts) : X.parts;
+  return Array.from({ length: n }, (_, i) => [i + 1, partName(X, i + 1)]);
+}
+
+// Marcador actual guardado de una jornada (o null si no tiene datos)
+function videoStatScore(fixtureId) {
+  const f = CALENDARIO.find((x) => x.id === fixtureId);
+  const rec = f && recordForFixture(f, load(KEY_HISTORY, []));
+  return rec ? { score: score(rec), events: rec.events.length } : null;
+}
+
+// Suma una acción al partido de la jornada. Devuelve { rec, ids, part, t } o un texto de error.
+function addVideoStat(fixtureId, v) {
+  const f = CALENDARIO.find((x) => x.id === fixtureId);
+  if (!f) return 'El análisis no está unido a una jornada del calendario.';
+  const history = load(KEY_HISTORY, []);
+  let rec = recordForFixture(f, history);
+  const blocked = videoStatBlocked(f.id, rec && rec.id);
+  if (blocked) return blocked;
+  const part = +v.part;
+  const t = parseMinute(v.min);
+  if (t == null) return 'Escribe el minuto del partido como 12:30 (minutos:segundos) o solo los minutos (12).';
+  const X = rec || fixtureRecord(f);
+  const len = X.partMs[part - 1] || X.partLen * 60000;
+  if (t > len) return `En la ${partName(X, part)} solo se jugaron ${fmt(len)}.`;
+  while (X.partMs.length < part) { X.partMs.push(0); X.possMs.push([0, 0]); X.players.forEach((p) => p.ms.push(0)); }
+  const evs = buildPastEvents(X, v, part, t);
+  evs.forEach((e) => { e.video = true; const p = e.num != null && findPlayer(X, e.num); if (p) p.called = true; });
+  insertByTime(X, evs);
+  X.editedAt = new Date().toISOString();
+  if (!rec) history.unshift(X);
+  store(KEY_HISTORY, history);
+  cloudMarkDirty(X.id);
+  return { rec: X.id, ids: evs.map((e) => e.id), part, t, txt: describe(X, evs[evs.length - 1]) };
+}
+
+// Quita del partido lo que sumó una acción del vídeo. Devuelve '' o un texto de error.
+function removeVideoStat(stat) {
+  const history = load(KEY_HISTORY, []);
+  const rec = history.find((r) => r.id === stat.rec);
+  if (!rec) return '';
+  const blocked = videoStatBlocked(rec.info.fixtureId, rec.id);
+  if (blocked) return blocked;
+  rec.events = rec.events.filter((e) => !stat.ids.includes(e.id));
+  rec.editedAt = new Date().toISOString();
+  store(KEY_HISTORY, history);
+  cloudMarkDirty(rec.id);
+  return '';
 }
 
 function recordTitle(rec) {

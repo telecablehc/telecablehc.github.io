@@ -432,6 +432,16 @@
       <label>Hora <input data-rec="hora" type="time"></label>
       <label>Pabellón <input data-rec="pabellon" type="text"></label>
     </div>
+    <div id="recOfWrap" class="official" hidden>
+          <h4>Resultado oficial (RFEP)</h4>
+          <p class="hint">Cópialo del acta de la RFEP. El partido solo queda cerrado si coincide con el marcador de la app. <a id="recOfLink" target="_blank" rel="noopener">Ver en la RFEP ↗</a></p>
+          <div class="official-row">
+            <label>Telecable HC <input id="recOfUs" type="text" inputmode="numeric" maxlength="2"></label>
+            <span>–</span>
+            <label>Rival <input id="recOfThem" type="text" inputmode="numeric" maxlength="2"></label>
+          </div>
+          <p id="recOfHint" class="hint"></p>
+    </div>
     <h4>Convocadas</h4>
     <p class="hint">Las que jugaron minutos no se pueden quitar.</p>
     <div id="recSquad" class="pick"></div>

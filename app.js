@@ -1100,16 +1100,52 @@ function renderMenu() {
 }
 
 // Un botón por jornada, con su estado
+// ---------- Resultado oficial (RFEP) ----------
+// El resultado oficial ("Telecable-rival") lo escribe la equipa a partir del acta de la RFEP
+// (Editar datos); si no, el del calendario. Un partido solo está "cerrado" si el marcador
+// de la app coincide con el oficial; si no, sale como incompleto.
+function officialResult(f, rec) {
+  const r = (rec && rec.info.oficial) || (f && f.resultado) || '';
+  return /^\d+-\d+$/.test(r) ? r : '';
+}
+
+// { state: 'live' | 'closed' | 'mismatch' | 'noOfficial' | 'noData' | 'upcoming', app, oficial }
+function fixtureStatus(f, rec, history) {
+  if (!f) return { state: 'none' };
+  if (isLiveFixture(f, rec)) return { state: 'live' };
+  const oficial = officialResult(f, rec);
+  const app = rec ? score(rec).join('-') : '';
+  const played = !!rec || !!oficial || (f.fecha && f.fecha < today());
+  if (!played) return { state: 'upcoming' };
+  if (!rec) return { state: 'noData', oficial };
+  if (!oficial) return { state: 'noOfficial', app };
+  return { state: app === oficial ? 'closed' : 'mismatch', app, oficial };
+}
+
+// Aviso en el resumen de un partido del calendario
+function officialBanner(rec) {
+  const f = rec.info.fixtureId && CALENDARIO.find((x) => x.id === rec.info.fixtureId);
+  if (!f || rec.mode !== 'partido') return '';
+  const st = fixtureStatus(f, rec);
+  const link = ` <a href="${RFEP_URL}" target="_blank" rel="noopener">Ver en la RFEP ↗</a>`;
+  if (st.state === 'closed') return `<p class="banner ok-banner">✓ Partido cerrado: coincide con el resultado oficial de la RFEP (${st.oficial}).</p>`;
+  if (st.state === 'mismatch') return `<p class="banner incomplete-banner">⚠ <b>Partido incompleto</b>: la app tiene ${st.app} y el resultado oficial de la RFEP es ${st.oficial}. Corrige los goles en «Editar datos» → Eventos (o el resultado oficial en Datos).${link}</p>`;
+  if (st.state === 'noOfficial') return `<p class="banner incomplete-banner">⚠ <b>Partido incompleto</b>: falta el resultado oficial de la RFEP. Escríbelo en «Editar datos» → Datos.${link}</p>`;
+  return '';
+}
+
 function renderCalendar(history) {
   const list = $('menuCal');
   list.replaceChildren(...CALENDARIO.map((f) => {
     const rec = recordForFixture(f, history);
-    const live = isLiveFixture(f, rec);
-    // color por resultado: el registrado en la app o, si no hay, el oficial de la RFEP
-    const goals = rec ? score(rec) : f.resultado ? f.resultado.split('-').map(Number) : null;
-    const outcome = live || !goals ? '' : goals[0] > goals[1] ? ' win' : goals[0] === goals[1] ? ' draw' : ' loss';
+    const st = fixtureStatus(f, rec);
+    const live = st.state === 'live';
+    // color por resultado solo si el partido está cerrado (coincide con la RFEP); si no, "incompleto"
+    const goals = st.state === 'closed' ? score(rec) : null;
+    const outcome = !goals ? '' : goals[0] > goals[1] ? ' win' : goals[0] === goals[1] ? ' draw' : ' loss';
+    const incomplete = ['mismatch', 'noOfficial', 'noData'].includes(st.state);
     const b = document.createElement('button');
-    b.className = 'fixture' + (live ? ' live' : rec ? ' done' : '') + outcome;
+    b.className = 'fixture' + (live ? ' live' : rec ? ' done' : '') + outcome + (incomplete ? ' incomplete' : '');
     b.innerHTML = `
       <span class="fx-j">J${f.jornada}</span>
       <span class="fx-main"><b></b><small></small></span>
@@ -1119,10 +1155,16 @@ function renderCalendar(history) {
     b.querySelector('small').title = f.local ? 'En casa' : 'Fuera';
     let state = '';
     if (live) state = `● ${score(S).join('-')}`;
-    else if (rec) state = `✓ ${score(rec).join('-')}`;
-    else if (f.resultado) state = `${f.resultado} · sin datos`;
+    else if (st.state === 'closed') state = `✓ ${st.app}`;
+    else if (st.state === 'mismatch') state = `⚠ Incompleto\nApp ${st.app} · RFEP ${st.oficial}`;
+    else if (st.state === 'noOfficial') state = `⚠ Incompleto\n${st.app} · falta RFEP`;
+    else if (st.state === 'noData') state = `⚠ Sin datos${st.oficial ? `\nRFEP ${st.oficial}` : ''}`;
     b.querySelector('.fx-state').textContent = state;
-    b.title = live ? 'Partido en curso' : rec ? 'Ver los datos de este partido' : 'Registrar este partido';
+    b.title = live ? 'Partido en curso'
+      : st.state === 'closed' ? 'Partido cerrado (coincide con la RFEP)'
+      : st.state === 'mismatch' ? 'El marcador de la app no coincide con el resultado oficial de la RFEP'
+      : st.state === 'noOfficial' ? 'Falta escribir el resultado oficial de la RFEP'
+      : rec ? 'Ver los datos de este partido' : 'Registrar este partido';
     b.onclick = () => openFixture(f);
     return b;
   }));
@@ -1362,7 +1404,7 @@ let currentRecord = null;
 
 function showRecord(rec) {
   currentRecord = rec;
-  $('resBody').innerHTML = summaryHtml(rec);
+  $('resBody').innerHTML = officialBanner(rec) + summaryHtml(rec);
   if (!$('dlgResults').open) $('dlgResults').showModal();
 }
 
@@ -1443,6 +1485,23 @@ function editRecord(rec) {
   let tab = 'datos';
 
   dlg.querySelectorAll('[data-rec]').forEach((el) => (el.value = X.info[el.dataset.rec] || ''));
+  const fx = X.mode === 'partido' && X.info.fixtureId ? CALENDARIO.find((f) => f.id === X.info.fixtureId) : null;
+  $('recOfWrap').hidden = !fx;
+  if (fx) {
+    const [oa, ob] = (officialResult(fx, X) || '-').split('-');
+    $('recOfUs').value = oa || '';
+    $('recOfThem').value = ob || '';
+    $('recOfLink').href = RFEP_URL;
+    const drawOf = () => {
+      const a = $('recOfUs').value.trim(), b = $('recOfThem').value.trim();
+      const app = score(X).join('-');
+      $('recOfHint').textContent = !a && !b ? 'Sin resultado oficial: el partido saldrá como incompleto.'
+        : `${a}-${b}` === app ? `✓ Coincide con el marcador de la app (${app}).` : `⚠ No coincide con el marcador de la app (${app}): el partido saldrá como incompleto.`;
+    };
+    $('recOfUs').oninput = $('recOfThem').oninput = drawOf;
+    drawOf();
+    X.__drawOf = drawOf;
+  }
 
   const timeInput = (ms, key, onset) => {
     const inp = document.createElement('input');
@@ -1598,7 +1657,7 @@ function editRecord(rec) {
     tab = name;
     $('recTabs').querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.t === name));
     dlg.querySelectorAll('[data-rectab]').forEach((el) => (el.hidden = el.dataset.rectab !== name));
-    if (name === 'datos') drawSquad();
+    if (name === 'datos') { drawSquad(); if (X.__drawOf) X.__drawOf(); }
     if (name === 'tiempos') drawTimes();
     if (name === 'eventos') drawEvents();
   }
@@ -1619,6 +1678,11 @@ function editRecord(rec) {
       const late = X.events.find((e) => e.part === i + 1 && e.t > X.partMs[i]);
       if (late) return alert(`«${describe(X, late)}» (${when(late.part, late.t)}) queda después del final de la ${pn}. Corrige el evento o la duración.`);
     }
+    if (fx) {
+      const a = $('recOfUs').value.trim(), b = $('recOfThem').value.trim();
+      if ((a || b) && !(/^\d{1,2}$/.test(a) && /^\d{1,2}$/.test(b))) return alert('Resultado oficial: escribe los goles de los dos equipos (por ejemplo 4 y 2), o deja los dos vacíos.');
+      X.info.oficial = a && b ? `${+a}-${+b}` : '';
+    }
     const unCalled = X.players.find((p) => sum(p.ms) > 0 && !called.has(p.num));
     if (unCalled) return alert(`#${unCalled.num} ${unCalled.name} tiene minutos pero no está convocada.`);
 
@@ -1632,6 +1696,7 @@ function editRecord(rec) {
       });
     });
     refreshRecordEvents(X, editedSanctions);
+    delete X.__drawOf;
     X.editedAt = new Date().toISOString();
 
     const history = load(KEY_HISTORY, []);

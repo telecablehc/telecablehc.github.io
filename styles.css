@@ -219,6 +219,16 @@ body:not(.in-game) { padding-bottom: calc(env(safe-area-inset-bottom) + 24px); }
 .fx-main small { color: var(--muted); font-size: 13px; }
 .fx-state { font-size: 13px; color: var(--muted); white-space: nowrap; text-align: right; }
 .fixture.done .fx-state { font-weight: 700; font-size: 15px; }
+/* Incompleto: el marcador no coincide con el resultado oficial de la RFEP (o falta uno de los dos) */
+.fixture.incomplete { background: repeating-linear-gradient(135deg, var(--panel) 0 10px, rgba(128,128,128,.10) 10px 20px); border-color: var(--muted); border-left-style: dashed; }
+.fixture.incomplete .fx-state { color: var(--muted); font-weight: 700; font-size: 13px; white-space: pre-line; }
+.banner.incomplete-banner { background: rgba(224,123,0,.14); border: 1px solid var(--draw); color: var(--text); margin: 0 0 12px; }
+.banner.ok-banner { background: var(--win-bg); border: 1px solid var(--on); color: var(--text); margin: 0 0 12px; }
+.official { border: 1px solid var(--line); border-radius: 12px; padding: 4px 12px 8px; margin: 10px 0; }
+.official-row { display: flex; align-items: end; gap: 10px; }
+.official-row label { display: flex; flex-direction: column; font-size: 14px; color: var(--muted); }
+.official-row input { width: 70px; padding: 10px; font-size: 22px; text-align: center; font-weight: 800; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); }
+.official-row span { font-size: 22px; padding-bottom: 10px; }
 #menuOther { margin-top: 4px; }
 
 #menuHist .hist-item { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; }

@@ -7,6 +7,8 @@
 
 const COMPETICION = "OK Liga Iberdrola";
 const TEMPORADA = "2026/2027";
+// Página oficial (solo para consultarla: la RFEP no autoriza extraer sus datos de forma automática)
+const RFEP_URL = "https://www.hockeypatines.fep.es/?liga=3569&vista=calendar";
 
 const CALENDARIO = [
   {"id":"okli2627-j1","jornada":1,"fecha":"2026-10-31","hora":"19:15","local":true,"rival":"ORKLA BIGUES I RIELLS","pabellon":"PABELLÓN DE MATA JOVE (LA CALZADA)","resultado":"5-2"},

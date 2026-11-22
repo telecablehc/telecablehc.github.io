@@ -117,7 +117,8 @@
     <li><a href="#c1">Primeros pasos</a>
       <ol><li><a href="#c1-instalar">Instalar la app</a></li><li><a href="#c1-cuenta">Iniciar sesión</a></li><li><a href="#c1-offline">Sin internet y actualizaciones</a></li><li><a href="#c1-nube">El punto de sincronización</a></li></ol></li>
     <li><a href="#c2">La pantalla de inicio y la navegación</a></li>
-    <li><a href="#c3">Partidos: el menú y el calendario</a></li>
+    <li><a href="#c3">Partidos: el menú y el calendario</a>
+      <ol><li><a href="#c3-oficial">Partidos cerrados e incompletos</a></li></ol></li>
     <li><a href="#c4">Durante el partido</a>
       <ol><li><a href="#c4-convocatoria">Convocatoria</a></li><li><a href="#c4-reloj">Reloj, pista y banquillo</a></li><li><a href="#c4-acciones">Registrar acciones</a></li><li><a href="#c4-pestanas">Las pestañas</a></li><li><a href="#c4-terminar">Fin de parte y terminar</a></li></ol></li>
     <li><a href="#c5">Después del partido: resumen y correcciones</a></li>
@@ -218,9 +219,19 @@
   <h3>El calendario</h3>
   <ul>
     <li>🏠 partido en casa · ✈️ partido fuera.</li>
-    <li>Color de las jornadas jugadas: <span class="dot" style="background:#1f9d55"></span>victoria, <span class="dot" style="background:#e07b00"></span>empate, <span class="dot" style="background:#d64545"></span>derrota.</li>
+    <li>Color de las jornadas <b>cerradas</b>: <span class="dot" style="background:#1f9d55"></span>victoria, <span class="dot" style="background:#e07b00"></span>empate, <span class="dot" style="background:#d64545"></span>derrota.</li>
     <li>Toca una jornada jugada para ver su resumen; toca una pendiente para empezar a registrarla.</li>
   </ul>
+  <h3 id="c3-oficial">Partidos cerrados e incompletos (resultado oficial de la RFEP)</h3>
+  <p>El marcador de la app tiene que coincidir siempre con el <b>resultado oficial de la RFEP</b>. Un partido solo está <b>cerrado</b> (y se pinta de verde, naranja o rojo) cuando coinciden. Si no, sale <b>rayado en gris</b> con un aviso:</p>
+  <div class="tbl"><table>
+    <tr><th>En el calendario</th><th>Qué pasa</th><th>Qué hacer</th></tr>
+    <tr><td>✓ 5-2 (en color)</td><td>Cerrado: la app y la RFEP coinciden.</td><td>Nada.</td></tr>
+    <tr><td>⚠ Incompleto · App 1-1 · RFEP 2-1</td><td>El marcador de la app no coincide con el oficial.</td><td>Corrige los goles en <span class="ui">Editar datos</span> → <span class="ui">Eventos</span>, o el resultado oficial si estaba mal escrito.</td></tr>
+    <tr><td>⚠ Incompleto · falta RFEP</td><td>Hay datos en la app, pero falta el resultado oficial.</td><td>Escríbelo en <span class="ui">Editar datos</span> → <span class="ui">Datos</span> → <i>Resultado oficial (RFEP)</i>.</td></tr>
+    <tr><td>⚠ Sin datos</td><td>El partido ya se jugó y no se registró en la app.</td><td>Regístralo (por ejemplo, desde el vídeo con <a href="#c8-marcador">Sumar al marcador</a>).</td></tr>
+  </table></div>
+  <p>El resultado oficial se copia <b>a mano</b> del acta de la RFEP: la RFEP no autoriza que otras aplicaciones extraigan sus datos de forma automática. El botón <span class="ui">Ver en la RFEP ↗</span> abre su página para consultarlo.</p>
   <div class="note"><b>Un partido a la vez</b>Solo puede haber un partido o entreno en curso. Si hay otro empezado, la app te avisa para que lo termines antes.</div>
   <a class="top-link" href="#indice">↑ Índice</a>
 </section>
@@ -277,7 +288,7 @@
 <!-- ===================================================== -->
 <section class="chap" id="c5">
   <h2><span class="n">5</span>Después del partido: resumen y correcciones</h2>
-  <p>Toca un partido del calendario o del historial para abrir su <b>resumen</b>. Abajo tienes:</p>
+  <p>Toca un partido del calendario o del historial para abrir su <b>resumen</b>. Arriba aparece si el partido está <b>cerrado</b> (coincide con la RFEP) o <b>incompleto</b> y por qué (ver <a href="#c3-oficial">capítulo 3</a>). Abajo tienes:</p>
   <ul>
     <li><span class="ui">Imprimir / PDF</span> y <span class="ui">CSV minutos</span> (los minutos de cada jugadora para Excel).</li>
     <li><span class="ui">Editar datos</span>: corregir <b>todo</b> a mano (ver abajo).</li>
@@ -288,7 +299,7 @@
   <h3>Editar datos: corregirlo todo a mano</h3>
   <p>La ventana <b>Editar partido</b> tiene tres pestañas. Nada cambia hasta que pulsas <span class="ui">Guardar</span>; <span class="ui">Cancelar</span> lo deja todo como estaba.</p>
   <h4>1. Datos</h4>
-  <p>Equipo, rival, competición, jornada, número de partido, fecha, hora, pabellón, <b>convocadas</b> y observaciones. Las jugadoras que tienen minutos no se pueden quitar de la convocatoria (primero pon sus minutos a 0).</p>
+  <p>Equipo, rival, competición, jornada, número de partido, fecha, hora, pabellón, <b>resultado oficial (RFEP)</b> (solo en los partidos del calendario; avisa en el momento si coincide o no con el marcador de la app), <b>convocadas</b> y observaciones. Las jugadoras que tienen minutos no se pueden quitar de la convocatoria (primero pon sus minutos a 0).</p>
   <h4>2. Minutos</h4>
   <p>Los tiempos se escriben como <b>12:30</b> (minutos:segundos) o solo los minutos (<b>12</b>).</p>
   <ul>
@@ -472,7 +483,7 @@
   <!-- Añadir aquí cada cambio nuevo (arriba del todo) y actualizar la fecha de la portada -->
   <dl class="log">
     <dt>22/11/2026</dt>
-    <dd><ul><li>Este manual de uso, dentro de la app (botón <span class="ui">📖 Manual de uso</span> en la pantalla de inicio y en Ajustes).</li></ul></dd>
+    <dd><ul><li>Partidos: el marcador tiene que coincidir con el <b>resultado oficial de la RFEP</b>. Si no coincide (o falta), el partido sale como <b>incompleto</b> en el calendario y en el resumen. Nuevo campo <i>Resultado oficial (RFEP)</i> en <span class="ui">Editar datos</span>.</li><li>Este manual de uso, dentro de la app (botón <span class="ui">📖 Manual de uso</span> en la pantalla de inicio y en Ajustes).</li></ul></dd>
     <dt>20/11/2026</dt>
     <dd><ul>
       <li>Análisis de vídeo: nueva fuente <b>Enlace (tiivii)</b>, que se ve dentro de la app con todas las funciones.</li>

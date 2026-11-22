@@ -417,19 +417,66 @@ function rinkMarkup() {
     ${end(4, 1)}${end(36, -1)}`;
 }
 
-// Camino ondulado (conducción) entre dos puntos, terminando recto para la punta
-function wavePath(x1, y1, x2, y2) {
-  const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy);
+// ---------- Caminos (la conducción se dibuja a mano alzada: it.pts = [[x, y], …] en 0–1) ----------
+const toM = ([x, y]) => [x * 40, y * 20];
+// Puntos de una flecha en metros
+// Suaviza un camino (Chaikin), conservando el principio y el final
+function smoothPath(P, times = 2) {
+  for (let n = 0; n < times && P.length > 2; n++) {
+    const out = [P[0]];
+    for (let i = 0; i < P.length - 1; i++) {
+      const [ax, ay] = P[i], [bx, by] = P[i + 1];
+      if (i > 0) out.push([ax * 0.75 + bx * 0.25, ay * 0.75 + by * 0.25]);
+      if (i < P.length - 2) out.push([ax * 0.25 + bx * 0.75, ay * 0.25 + by * 0.75]);
+    }
+    out.push(P[P.length - 1]);
+    P = out;
+  }
+  return P;
+}
+const pathM = (it) => (it.pts && it.pts.length > 2 ? smoothPath(it.pts.map(toM)) : (it.pts && it.pts.length > 1 ? it.pts : [[it.x, it.y], [it.x2, it.y2]]).map(toM));
+const pathLen = (P) => P.reduce((L, p, i) => (i ? L + Math.hypot(p[0] - P[i - 1][0], p[1] - P[i - 1][1]) : 0), 0);
+// Punto a una distancia s (metros) a lo largo del camino; más allá del final sigue en la última dirección
+function pointAlong(P, s) {
+  if (P.length < 2) return { x: P[0][0], y: P[0][1], dx: 1, dy: 0 };
+  for (let i = 1; i < P.length; i++) {
+    const [ax, ay] = P[i - 1], [bx, by] = P[i], l = Math.hypot(bx - ax, by - ay);
+    if (s <= l || i === P.length - 1) {
+      const k = l ? s / l : 0, dx = l ? (bx - ax) / l : 1, dy = l ? (by - ay) / l : 0;
+      return { x: ax + (bx - ax) * k, y: ay + (by - ay) * k, dx, dy };
+    }
+    s -= l;
+  }
+}
+// Simplifica un trazo a mano (Ramer–Douglas–Peucker, en metros)
+function simplifyPath(P, eps = 0.15) {
+  if (P.length < 3) return P;
+  const [ax, ay] = P[0], [bx, by] = P[P.length - 1];
+  const L = Math.hypot(bx - ax, by - ay) || 1;
+  let idx = 0, max = 0;
+  for (let i = 1; i < P.length - 1; i++) {
+    const d = Math.abs((by - ay) * P[i][0] - (bx - ax) * P[i][1] + bx * ay - by * ax) / L;
+    if (d > max) { max = d; idx = i; }
+  }
+  if (max <= eps) return [P[0], P[P.length - 1]];
+  return [...simplifyPath(P.slice(0, idx + 1), eps).slice(0, -1), ...simplifyPath(P.slice(idx), eps)];
+}
+
+// Camino ondulado (conducción) a lo largo de unos puntos en metros, terminando recto para la punta
+function wavePathM(P) {
+  const L = pathLen(P);
+  const [x1, y1] = P[0], [x2, y2] = P[P.length - 1];
   if (L < 1.2) return `M${x1},${y1} L${x2},${y2}`;
-  const ux = dx / L, uy = dy / L, nx = -uy, ny = ux;
   const waveLen = L - 0.7, steps = Math.max(8, Math.round(waveLen * 6)), waves = Math.max(2, Math.round(waveLen / 1.1));
   let d = `M${x1},${y1}`;
   for (let i = 1; i <= steps; i++) {
     const s = (i / steps) * waveLen, off = Math.sin((i / steps) * waves * 2 * Math.PI) * 0.3;
-    d += ` L${(x1 + ux * s + nx * off).toFixed(2)},${(y1 + uy * s + ny * off).toFixed(2)}`;
+    const q = pointAlong(P, s);
+    d += ` L${(q.x - q.dy * off).toFixed(2)},${(q.y + q.dx * off).toFixed(2)}`;
   }
   return d + ` L${x2},${y2}`;
 }
+const wavePath = (x1, y1, x2, y2) => wavePathM([[x1, y1], [x2, y2]]);
 
 // opts.pos: posición animada de las fichas (idx → {x, y}); opts.step: paso que se está animando;
 // opts.badges: mostrar el número de paso en cada flecha
@@ -448,13 +495,15 @@ function itemMarkup(it, id, idx, opts = {}) {
     case 'cone': return g(`<path d="M${X},${Y - 0.6} L${X + 0.5},${Y + 0.4} L${X - 0.5},${Y + 0.4} Z" fill="#ffd400" stroke="#111" stroke-width="0.08"/>`);
     default: {
       const X2 = it.x2 * 40, Y2 = it.y2 * 20;
-      const d = it.t === 'drive' ? wavePath(X, Y, X2, Y2) : `M${X},${Y} L${X2},${Y2}`;
+      const P = pathM(it);
+      const d = it.t === 'drive' ? wavePathM(P) : `M${X},${Y} L${X2},${Y2}`;
+      const mid = pointAlong(P, pathLen(P) / 2);
       const dash = it.t === 'pass' ? ' stroke-dasharray="0.5 0.35"' : '';
       const width = it.t === 'shot' ? 0.24 : 0.14;
       // número de paso junto a la mitad de la flecha
       const badge = opts.badges
-        ? `<circle cx="${(X + X2) / 2}" cy="${(Y + Y2) / 2 - 0.7}" r="0.5" fill="#fff" stroke="#111" stroke-width="0.06"/>
-           <text x="${(X + X2) / 2}" y="${(Y + Y2) / 2 - 0.48}" font-size="0.6" text-anchor="middle" font-weight="700" fill="#111">${stepOf(it)}</text>`
+        ? `<circle cx="${mid.x}" cy="${mid.y - 0.7}" r="0.5" fill="#fff" stroke="#111" stroke-width="0.06"/>
+           <text x="${mid.x}" y="${mid.y - 0.48}" font-size="0.6" text-anchor="middle" font-weight="700" fill="#111">${stepOf(it)}</text>`
         : '';
       // línea ancha transparente para que sea fácil de tocar
       return g(`<path d="${d}" stroke="transparent" stroke-width="1.2" fill="none"/>
@@ -512,12 +561,14 @@ function buildTimeline(items, vel = 1) {
   for (let s = 1; s <= maxStep(items); s++) {
     const arrows = items.filter((it) => ARROWS.includes(it.t) && stepOf(it) === s);
     if (!arrows.length) continue;
-    const dur = Math.max(...arrows.map((a) => STEP_TIME[a.t]));
+    // conducción a mano alzada: más tiempo si el recorrido es largo (unos 7 m/s)
+    const timeOf = (a) => (a.pts ? Math.max(STEP_TIME[a.t], pathLen(pathM(a)) / 7) : STEP_TIME[a.t]);
+    const dur = Math.max(...arrows.map(timeOf));
     const used = new Set();
     const moves = [];
     arrows.forEach((a) => {
       const start = { x: a.x, y: a.y }, end = { x: a.x2, y: a.y2 };
-      const len = STEP_TIME[a.t];
+      const len = timeOf(a);
       if (a.t === 'pass' || a.t === 'shot') {
         const b = nearest(['ball'], start, 2.5, used);
         if (b != null) { used.add(b); moves.push({ idx: b, from: { ...pos[b] }, to: end, t0: t, t1: t + len }); }
@@ -525,6 +576,16 @@ function buildTimeline(items, vel = 1) {
         const pl = nearest(PLAYERS_T, start, 2.5, used);
         if (pl != null) {
           used.add(pl);
+          if (a.t === 'drive' && a.pts && a.pts.length > 1) {
+            // recorrido a mano: la jugadora lo sigue y la bola va un poco por delante en el mismo camino
+            const path = [[pos[pl].x, pos[pl].y], ...a.pts.slice(1)];
+            const PM = smoothPath(path.map(toM)), L = pathLen(PM);
+            const at = (s) => { const q = pointAlong(PM, s); return { x: q.x / 40, y: q.y / 20 }; };
+            moves.push({ idx: pl, from: { ...pos[pl] }, to: at(L), t0: t, t1: t + len, path: PM });
+            const b = nearest(['ball'], pos[pl], 2, used);
+            if (b != null) { used.add(b); moves.push({ idx: b, from: { ...pos[b] }, to: at(L + 0.9), t0: t, t1: t + len, path: PM, lead: 0.9 }); }
+            return;
+          }
           moves.push({ idx: pl, from: { ...pos[pl] }, to: end, t0: t, t1: t + len });
           if (a.t === 'drive') { // la bola va pegada a la jugadora
             const b = nearest(['ball'], pos[pl], 2, used);
@@ -556,6 +617,13 @@ function positionsAt(items, timeline, t) {
   timeline.segs.forEach((s) => {
     if (t < s.t0) return;
     const k = t >= s.t1 ? 1 : ease((t - s.t0) / (s.t1 - s.t0));
+    if (s.path) {
+      const q = pointAlong(s.path, k * pathLen(s.path) + (s.lead || 0));
+      // la bola pasa poco a poco de donde estaba al camino (delante de la jugadora)
+      const w = s.lead ? Math.min(1, k * 8) : 1;
+      pos[s.idx] = { x: s.from.x + (q.x / 40 - s.from.x) * w, y: s.from.y + (q.y / 20 - s.from.y) * w };
+      return;
+    }
     pos[s.idx] = { x: s.from.x + (s.to.x - s.from.x) * k, y: s.from.y + (s.to.y - s.from.y) * k };
   });
   const step = (timeline.segs.find((s) => t >= s.t0 && t <= s.t1) || {}).step ?? null;
@@ -775,7 +843,10 @@ function openDrawEditor(dibujo, onDone) {
         const b = { x: it.x2, y: it.y2 };
         if (meters(p, it) < 0.9) return { i, part: 'a' };
         if (meters(p, b) < 0.9) return { i, part: 'b' };
-        if (segDist(p, it, b) < 0.6) return { i, part: 'all' };
+        const pts = it.pts && it.pts.length > 1 ? it.pts : [[it.x, it.y], [it.x2, it.y2]];
+        for (let k = 1; k < pts.length; k++) {
+          if (segDist(p, { x: pts[k - 1][0], y: pts[k - 1][1] }, { x: pts[k][0], y: pts[k][1] }) < 0.6) return { i, part: 'all' };
+        }
       } else if (meters(p, it) < 1) return { i, part: 'all' };
     }
     return null;
@@ -858,7 +929,9 @@ function openDrawEditor(dibujo, onDone) {
     );
     $('drawHint').textContent = playing ? 'Viendo el movimiento. Pulsa «Parar» para seguir dibujando.' : DRAW_HINTS[tool] ||
       (ARROWS.includes(tool)
-        ? `Arrastra desde el inicio hasta el final de la flecha (paso ${step}). Las flechas del mismo paso se mueven a la vez.`
+        ? (tool === 'drive'
+          ? `Dibuja con el dedo el recorrido de la conducción, por ejemplo entre los conos (paso ${step}).`
+          : `Arrastra desde el inicio hasta el final de la flecha (paso ${step}). Las flechas del mismo paso se mueven a la vez.`)
         : 'Toca la pista para colocarlo.');
   };
 
@@ -882,7 +955,7 @@ function openDrawEditor(dibujo, onDone) {
       return;
     }
     if (ARROWS.includes(tool)) {
-      drag = { preview: { t: tool, x: p.x, y: p.y, x2: p.x, y2: p.y, p: step } };
+      drag = { preview: { t: tool, x: p.x, y: p.y, x2: p.x, y2: p.y, p: step, ...(tool === 'drive' ? { pts: [[p.x, p.y]] } : {}) } };
       capture(ev);
       return;
     }
@@ -896,12 +969,21 @@ function openDrawEditor(dibujo, onDone) {
     if (!drag) return;
     const p = toPoint(ev);
     if (drag.preview) {
-      drag.preview.x2 = p.x; drag.preview.y2 = p.y;
+      const a = drag.preview;
+      // conducción: se va guardando el recorrido del dedo
+      if (a.pts) { const last = a.pts[a.pts.length - 1]; if (meters(p, { x: last[0], y: last[1] }) > 0.25) a.pts.push([p.x, p.y]); }
+      a.x2 = p.x; a.y2 = p.y;
     } else {
       const it = items[drag.i];
       const dx = p.x - drag.last.x, dy = p.y - drag.last.y;
       if (drag.part !== 'b') { it.x = clamp(it.x + dx, 0, 1); it.y = clamp(it.y + dy, 0, 1); }
       if (ARROWS.includes(it.t) && drag.part !== 'a') { it.x2 = clamp(it.x2 + dx, 0, 1); it.y2 = clamp(it.y2 + dy, 0, 1); }
+      if (it.pts && it.pts.length > 1) {
+        // recorrido a mano: se mueve entero, o solo su principio / su final
+        if (drag.part === 'all') it.pts = it.pts.map(([x, y]) => [clamp(x + dx, 0, 1), clamp(y + dy, 0, 1)]);
+        else if (drag.part === 'a') it.pts[0] = [it.x, it.y];
+        else it.pts[it.pts.length - 1] = [it.x2, it.y2];
+      }
       drag.last = p;
     }
     redraw();
@@ -909,7 +991,13 @@ function openDrawEditor(dibujo, onDone) {
   svg.onpointerup = svg.onpointercancel = () => {
     if (drag && drag.preview) {
       const a = drag.preview;
-      if (meters(a, { x: a.x2, y: a.y2 }) > 0.8) { snapshot(); items.push(a); }
+      if (a.pts) {
+        a.pts.push([a.x2, a.y2]);
+        const P = simplifyPath(a.pts.map(toM));
+        a.pts = P.map(([x, y]) => [+(x / 40).toFixed(4), +(y / 20).toFixed(4)]);
+        if (a.pts.length < 3) delete a.pts; // casi recta: flecha normal
+        if (pathLen(P) > 0.8) { snapshot(); items.push(a); }
+      } else if (meters(a, { x: a.x2, y: a.y2 }) > 0.8) { snapshot(); items.push(a); }
     }
     drag = null;
     redraw();

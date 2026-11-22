@@ -487,9 +487,14 @@ const maxStep = (items) => items.reduce((m, it) => (ARROWS.includes(it.t) ? Math
 const hasMoves = (dibujo) => !!dibujo && (dibujo.items || []).some((it) => ARROWS.includes(it.t));
 const STEP_TIME = { run: 1.4, drive: 1.6, pass: 0.8, shot: 0.7 }; // segundos
 const PLAYERS_T = ['own', 'opp', 'gk'];
+// Velocidad de la animación (se guarda en el dibujo: dibujo.vel). 1 = normal.
+const SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2];
+const speedOf = (dibujo) => (dibujo && SPEEDS.includes(dibujo.vel) ? dibujo.vel : 1);
+const speedText = (v) => String(v).replace('.', ',') + '×';
 
-// Calcula la línea de tiempo: [{idx, from, to, t0, t1}] y la duración total
-function buildTimeline(items) {
+// Calcula la línea de tiempo: [{idx, from, to, t0, t1}] y la duración total.
+// vel: velocidad (2 = el doble de rápido; 0,5 = la mitad)
+function buildTimeline(items, vel = 1) {
   const pos = {};
   items.forEach((it, i) => { if (!ARROWS.includes(it.t)) pos[i] = { x: it.x, y: it.y }; });
   const dist = (a, b) => Math.hypot((a.x - b.x) * 40, (a.y - b.y) * 20);
@@ -540,7 +545,8 @@ function buildTimeline(items) {
     moves.forEach((m) => { pos[m.idx] = { ...m.to }; segs.push({ ...m, step: s }); });
     t += dur + 0.3;
   }
-  return { segs, total: t + 0.8 };
+  const k = 1 / vel;
+  return { segs: segs.map((s) => ({ ...s, t0: s.t0 * k, t1: s.t1 * k })), total: (t + 0.8) * k };
 }
 
 // Posición de las fichas en el segundo t
@@ -562,7 +568,7 @@ function mountDrawing(container, dibujo, getName = () => '') {
   container.innerHTML = drawingSvg(dibujo);
   if (!hasMoves(dibujo)) return;
   const items = dibujo.items;
-  const timeline = buildTimeline(items);
+  const timeline = buildTimeline(items, speedOf(dibujo));
   container.classList.add('video');
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -663,7 +669,7 @@ async function downloadExerciseVideo(dibujo, nombre, button) {
   button.disabled = true;
   try {
     const items = dibujo.items;
-    const timeline = buildTimeline(items);
+    const timeline = buildTimeline(items, speedOf(dibujo));
     const duration = timeline.total + 0.6; // una vuelta completa y un momento quieto al final
     const canvas = document.createElement('canvas');
     canvas.width = VIDEO_W; canvas.height = VIDEO_H;
@@ -740,6 +746,7 @@ function openDrawEditor(dibujo, onDone) {
   let drag = null;
   let step = Math.max(1, maxStep(items)); // paso de las flechas nuevas
   let playing = null; // animación de prueba en marcha
+  let vel = speedOf(dibujo); // velocidad de los movimientos
   const svg = $('drawSvg');
   const dlg = $('dlgDraw');
   const snapshot = () => { undoList.push(JSON.stringify(items)); if (undoList.length > 50) undoList.shift(); };
@@ -784,7 +791,7 @@ function openDrawEditor(dibujo, onDone) {
   const stopPreview = () => { if (playing) { cancelAnimationFrame(playing.raf); playing = null; redraw(); drawTools(); } };
   const startPreview = () => {
     if (!items.some((it) => ARROWS.includes(it.t))) { alert('Dibuja primero alguna flecha de movimiento, pase o conducción.'); return; }
-    const timeline = buildTimeline(items);
+    const timeline = buildTimeline(items, vel);
     const t0 = performance.now();
     playing = { raf: 0 };
     const frame = (now) => {
@@ -815,6 +822,24 @@ function openDrawEditor(dibujo, onDone) {
         const [minus, plus] = box.querySelectorAll('button');
         minus.onclick = () => { step = Math.max(1, step - 1); drawTools(); };
         plus.onclick = () => { step = Math.min(20, step + 1); drawTools(); };
+        return box;
+      })(),
+      // velocidad de los movimientos (se guarda con el dibujo; afecta también al vídeo descargado)
+      (() => {
+        const box = document.createElement('div');
+        box.className = 'tool tool-step tool-speed';
+        box.title = 'Velocidad a la que se mueven las jugadoras y la bola';
+        box.innerHTML = '<span class="tool-label">Velocidad</span><span class="step-ctl"><button type="button" aria-label="Más lento">−</button><b></b><button type="button" aria-label="Más rápido">+</button></span>';
+        box.querySelector('b').textContent = speedText(vel);
+        const [minus, plus] = box.querySelectorAll('button');
+        const set = (d) => {
+          vel = SPEEDS[Math.min(SPEEDS.length - 1, Math.max(0, SPEEDS.indexOf(vel) + d))];
+          if (playing) { cancelAnimationFrame(playing.raf); playing = null; startPreview(); } else drawTools();
+        };
+        minus.disabled = vel === SPEEDS[0];
+        plus.disabled = vel === SPEEDS[SPEEDS.length - 1];
+        minus.onclick = () => set(-1);
+        plus.onclick = () => set(1);
         return box;
       })(),
       Object.assign(document.createElement('button'), {
@@ -892,7 +917,7 @@ function openDrawEditor(dibujo, onDone) {
 
   $('drawCancel').onclick = () => { stopPreview(); dlg.close(); };
   // con movimientos se guarda como "vídeo" (animado); sin movimientos, como imagen
-  $('drawOk').onclick = () => { stopPreview(); dlg.close(); onDone({ items, animado: hasMoves({ items }) }); };
+  $('drawOk').onclick = () => { stopPreview(); dlg.close(); onDone({ items, animado: hasMoves({ items }), ...(vel !== 1 ? { vel } : {}) }); };
   drawTools();
   redraw();
   dlg.showModal();

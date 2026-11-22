@@ -493,6 +493,8 @@ dialog.draw-dialog { width: min(1100px, calc(100vw - 12px)); max-height: 96vh; p
 .step-ctl { display: flex; align-items: center; gap: 4px; }
 .step-ctl button { width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); padding: 0; font-weight: 700; }
 .step-ctl b { min-width: 16px; text-align: center; font-size: 16px; }
+.tool-speed .step-ctl b { min-width: 40px; font-size: 14px; }
+.step-ctl button:disabled { opacity: .35; }
 .tool-play .tool-icon { color: var(--on); }
 .tool-play.active .tool-icon { color: #fff; }
 @media print { .video-btn, .video-bar { display: none; } }

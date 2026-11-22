@@ -181,6 +181,9 @@ body:not(.in-game) { padding-bottom: calc(env(safe-area-inset-bottom) + 24px); }
 .home-btn-title { font-size: 30px; font-weight: 800; }
 .home-btn-sub { font-size: 14px; opacity: .85; min-height: 1em; }
 .home-btn:active, .menu-btn:active { transform: scale(.98); }
+.home-manual { display: block; margin-top: 4px; padding: 12px; text-align: center; color: var(--brand); font-weight: 700; text-decoration: none; border-radius: 12px; }
+.home-manual:active { background: var(--line); }
+@media (prefers-color-scheme: dark) { .home-manual { color: #8cc4ea; } }
 
 /* Menú de sección */
 #screen-menu { max-width: 720px; margin: 0 auto; }

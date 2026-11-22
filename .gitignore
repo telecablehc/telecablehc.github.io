@@ -2,6 +2,7 @@
 *
 !.gitignore
 !index.html
+!manual.html
 !app.js
 !cloud.js
 !calendar.js

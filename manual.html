@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Manual de uso · Telecable HC</title>
+<meta name="theme-color" content="#0f3d5e">
+<link rel="icon" href="icon-192.png" type="image/png">
+<style>
+  /* Manual de la app. Se actualiza con cada cambio de la app (ver «Novedades»). */
+  :root {
+    --brand: #0f3d5e; --brand-2: #1c6a9c; --accent: #e8b23a;
+    --bg: #f4f6f8; --paper: #ffffff; --text: #1d2730; --muted: #5d6b78; --line: #dde3e8;
+    --good: #1f9d55; --bad: #d64545; --warn: #e07b00; --tip: #eaf3fb; --note: #fff6e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e141a; --paper: #151e26; --text: #e4eaf0; --muted: #9aa8b5; --line: #26333f;
+      --brand-2: #5aa9dd; --tip: #13283a; --note: #2e2614;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top)); background: var(--brand); color: #fff; }
+  .bar a, .bar button { color: #fff; text-decoration: none; background: rgba(255,255,255,.14); border: 0; border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 15px; cursor: pointer; }
+  .bar .t { flex: 1; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  main { max-width: 820px; margin: 0 auto; padding: 0 16px 60px; }
+  .cover { text-align: center; padding: 40px 16px 28px; }
+  .cover img { width: 120px; height: auto; }
+  .cover h1 { margin: 14px 0 4px; font-size: 34px; line-height: 1.15; color: var(--brand); }
+  .cover .sub { color: var(--muted); font-size: 18px; margin: 0; }
+  .cover .ver { display: inline-block; margin-top: 14px; padding: 4px 12px; border-radius: 999px; background: var(--paper); border: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cover h1 { color: #fff; } }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; margin: 18px 0; }
+  .toc ol { margin: 0; padding-left: 22px; }
+  .toc li { margin: 4px 0; }
+  .toc a { color: var(--brand-2); text-decoration: none; font-weight: 600; }
+  .toc ol ol { font-weight: 400; }
+  .toc ol ol a { font-weight: 400; }
+  section.chap { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 22px; margin: 22px 0; }
+  .chap > h2 { margin: 0 0 12px; font-size: 26px; line-height: 1.2; color: var(--brand-2); }
+  .chap > h2 .n { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; margin-right: 8px; border-radius: 10px; background: var(--brand); color: #fff; font-size: 20px; vertical-align: 3px; }
+  h3 { margin: 24px 0 8px; font-size: 20px; }
+  h4 { margin: 18px 0 6px; font-size: 17px; }
+  p, li { max-width: 70ch; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 4px 0; }
+  .ui { display: inline-block; padding: 0 7px; border-radius: 7px; background: var(--bg); border: 1px solid var(--line); font-weight: 600; font-size: .92em; white-space: nowrap; }
+  .tip, .note, .warn { border-radius: 12px; padding: 12px 14px; margin: 14px 0; }
+  .tip { background: var(--tip); border-left: 4px solid var(--brand-2); }
+  .note { background: var(--note); border-left: 4px solid var(--accent); }
+  .warn { background: rgba(214,69,69,.1); border-left: 4px solid var(--bad); }
+  .tip b:first-child, .note b:first-child, .warn b:first-child { display: block; margin-bottom: 2px; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 15px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .tbl { overflow-x: auto; }
+  .dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: -2px; margin-right: 4px; }
+  .steps { counter-reset: s; list-style: none; padding-left: 0; }
+  .steps > li { counter-increment: s; position: relative; padding-left: 40px; margin: 10px 0; }
+  .steps > li::before { content: counter(s); position: absolute; left: 0; top: 1px; width: 28px; height: 28px; border-radius: 50%; background: var(--brand); color: #fff; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; }
+  .log dt { font-weight: 700; margin-top: 14px; color: var(--brand-2); }
+  .log dd { margin: 4px 0 0 0; }
+  .log ul { margin: 4px 0; }
+  .top-link { display: block; text-align: right; font-size: 14px; margin-top: 16px; }
+  .top-link a { color: var(--muted); }
+  footer { text-align: center; color: var(--muted); font-size: 14px; padding: 20px 0 40px; }
+  [id] { scroll-margin-top: 70px; }
+  main a { color: var(--brand-2); }
+  @media (max-width: 520px) {
+    body { font-size: 16px; }
+    .bar .t { display: none; }
+    .bar { justify-content: space-between; }
+    .ui { white-space: normal; }
+    /* tablas en tarjetas: una fila debajo de otra */
+    .tbl table, .tbl tbody, .tbl tr, .tbl td { display: block; width: 100%; }
+    .tbl tr:first-child { display: none; }
+    .tbl tr { padding: 8px 0; border-bottom: 1px solid var(--line); }
+    .tbl td { border: 0; padding: 2px 0; }
+    .tbl td:first-child { font-weight: 600; }
+    section.chap, .card { padding: 16px; border-radius: 14px; }
+    .cover h1 { font-size: 28px; }
+  }
+  /* Imprimir / guardar como PDF: un capítulo por página */
+  @media print {
+    :root { --bg: #fff; --paper: #fff; --text: #000; --muted: #444; --line: #ccc; --tip: #eef5fb; --note: #fff7e3; }
+    .bar, .top-link, .no-print { display: none !important; }
+    body { font-size: 12pt; background: #fff; }
+    main { max-width: none; padding: 0; }
+    .cover { padding-top: 30vh; page-break-after: always; }
+    .toc { page-break-after: always; border: 0; }
+    section.chap { border: 0; padding: 0; page-break-before: always; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+<div class="bar">
+  <a href="./#inicio" id="backApp">‹ Volver a la app</a>
+  <span class="t">Manual de uso</span>
+  <button type="button" onclick="print()">Imprimir / PDF</button>
+</div>
+
+<main>
+<div class="cover">
+  <img src="crest.png" alt="Telecable HC">
+  <h1>Manual de uso<br>de la app del Telecable HC</h1>
+  <p class="sub">Estadística de partidos, entrenos y análisis de vídeo</p>
+  <!-- Al cambiar la app: actualizar esta fecha y añadir la entrada en «Novedades» -->
+  <span class="ver">Actualizado el 22/11/2026</span>
+</div>
+
+<nav class="card toc" id="indice">
+  <h2 style="margin-top:0">Índice</h2>
+  <ol>
+    <li><a href="#c1">Primeros pasos</a>
+      <ol><li><a href="#c1-instalar">Instalar la app</a></li><li><a href="#c1-cuenta">Iniciar sesión</a></li><li><a href="#c1-offline">Sin internet y actualizaciones</a></li><li><a href="#c1-nube">El punto de sincronización</a></li></ol></li>
+    <li><a href="#c2">La pantalla de inicio y la navegación</a></li>
+    <li><a href="#c3">Partidos: el menú y el calendario</a></li>
+    <li><a href="#c4">Durante el partido</a>
+      <ol><li><a href="#c4-convocatoria">Convocatoria</a></li><li><a href="#c4-reloj">Reloj, pista y banquillo</a></li><li><a href="#c4-acciones">Registrar acciones</a></li><li><a href="#c4-pestanas">Las pestañas</a></li><li><a href="#c4-terminar">Fin de parte y terminar</a></li></ol></li>
+    <li><a href="#c5">Después del partido: resumen y correcciones</a></li>
+    <li><a href="#c6">Totales</a></li>
+    <li><a href="#c7">Entrenos</a>
+      <ol><li><a href="#c7-sinplan">Entreno sin plan</a></li><li><a href="#c7-plan">Planificar un entreno</a></li><li><a href="#c7-biblio">Biblioteca de ejercicios</a></li><li><a href="#c7-dibujo">Dibujar en la pista y ejercicios con movimiento</a></li></ol></li>
+    <li><a href="#c8">Análisis de vídeo</a>
+      <ol><li><a href="#c8-nuevo">Crear un análisis</a></li><li><a href="#c8-acciones">Marcar acciones</a></li><li><a href="#c8-teclados">Teclados personalizados</a></li><li><a href="#c8-marcador">Sumar al marcador del partido</a></li><li><a href="#c8-clips">Clips</a></li><li><a href="#c8-dibujar">Dibujar sobre el vídeo</a></li><li><a href="#c8-okliga">OK Liga TV</a></li></ol></li>
+    <li><a href="#c9">Ajustes, copia de seguridad y cuentas</a></li>
+    <li><a href="#c10">Problemas frecuentes</a></li>
+    <li><a href="#c11">Novedades</a></li>
+  </ol>
+</nav>
+
+<!-- ===================================================== -->
+<section class="chap" id="c1">
+  <h2><span class="n">1</span>Primeros pasos</h2>
+  <p>La app del Telecable HC sirve para llevar la estadística de los partidos (minutos de cada jugadora, goles, faltas, tarjetas, posesión…), planificar los entrenos y analizar vídeos. Funciona en tablet, móvil y ordenador (Android, iPhone/iPad y Windows) y también <b>sin internet</b>.</p>
+  <p>Dirección de la app: <b>https://telecablehc.github.io</b></p>
+
+  <h3 id="c1-instalar">Instalar la app</h3>
+  <p>No hace falta tienda de aplicaciones: se instala desde el navegador y queda con su icono, como cualquier app.</p>
+  <h4>Tablet o móvil Android (Samsung incluido)</h4>
+  <ol class="steps">
+    <li>Abre la dirección de la app en <b>Chrome</b> (o en Samsung Internet).</li>
+    <li>Toca el menú <span class="ui">⋮</span> (o <span class="ui">≡</span> en Samsung Internet) y elige <span class="ui">Instalar aplicación</span> o <span class="ui">Añadir a pantalla de inicio</span>.</li>
+    <li>Abre la app desde el icono del escudo.</li>
+  </ol>
+  <h4>iPhone o iPad</h4>
+  <ol class="steps">
+    <li>Abre la dirección en <b>Safari</b>.</li>
+    <li>Toca <span class="ui">Compartir</span> (el cuadrado con la flecha hacia arriba) y después <span class="ui">Añadir a pantalla de inicio</span>.</li>
+  </ol>
+  <h4>Ordenador con Windows</h4>
+  <ol class="steps">
+    <li>Abre la dirección en <b>Edge</b> o <b>Chrome</b>.</li>
+    <li>Pulsa el icono de instalar que aparece a la derecha de la barra de direcciones (o menú <span class="ui">…</span> → <span class="ui">Aplicaciones</span> → <span class="ui">Instalar</span>).</li>
+  </ol>
+
+  <h3 id="c1-cuenta">Iniciar sesión</h3>
+  <p>Al abrir la app por primera vez aparece la pantalla de acceso. Entra con tu <b>email y contraseña</b>. Solo pueden entrar los emails autorizados por el club; si tu email no está en la lista, la app te lo dirá: pide a la administradora que te añada.</p>
+  <ul>
+    <li><span class="ui">¿No tienes cuenta? Crear cuenta</span>: la primera vez, crea la contraseña. Recibirás un email para confirmarla.</li>
+    <li><span class="ui">He olvidado la contraseña</span>: escribe tu email y te llega un enlace para cambiarla.</li>
+  </ul>
+  <p>Con la sesión iniciada, todo lo que guardes (partidos, entrenos, análisis…) se comparte con el resto de dispositivos del equipo.</p>
+  <div class="note"><b>Cuenta de pruebas</b>La cuenta de pruebas tiene sus propios datos, separados de los del equipo. Si en el mismo dispositivo entras con otra cuenta, la app guarda aparte los datos de la anterior y los recupera cuando vuelve a entrar: los datos de dos cuentas nunca se mezclan.</div>
+
+  <h3 id="c1-offline">Sin internet y actualizaciones</h3>
+  <ul>
+    <li>La app se abre siempre desde la copia guardada en el dispositivo: funciona en pabellones sin cobertura. Lo que guardes sin internet se sube solo cuando vuelve la conexión.</li>
+    <li>Para que funcione sin internet, ábrela <b>al menos una vez con internet</b> en ese dispositivo. En <span class="ui">⚙ Ajustes</span> → <i>Sin conexión</i> puedes comprobar si está lista.</li>
+    <li><b>Actualizaciones:</b> cuando hay una versión nueva, se descarga sola en segundo plano y aparece <b>la siguiente vez</b> que abres la app. Para tenerla ya: abre la app con internet, ciérrala del todo y vuelve a abrirla.</li>
+  </ul>
+  <div class="tip"><b>El partido nunca se pierde</b>Todo se guarda en el momento. Si cierras la app, se apaga la tablet o te quedas sin batería durante un partido, al volver a abrirla el partido sigue donde estaba, y el reloj ha seguido contando el tiempo que ha pasado.</div>
+
+  <h3 id="c1-nube">El punto de sincronización</h3>
+  <p>Junto al escudo, arriba a la izquierda, hay un punto de color:</p>
+  <div class="tbl"><table>
+    <tr><th>Color</th><th>Qué significa</th></tr>
+    <tr><td><span class="dot" style="background:#1f9d55"></span>Verde</td><td>Todo sincronizado con la nube.</td></tr>
+    <tr><td><span class="dot" style="background:#e8b23a"></span>Ámbar</td><td>Sincronizando o con cambios pendientes de subir.</td></tr>
+    <tr><td><span class="dot" style="background:#8a96a3"></span>Gris</td><td>Sin conexión. Se subirá todo al volver internet.</td></tr>
+    <tr><td><span class="dot" style="background:#d64545"></span>Rojo</td><td>Error al sincronizar. El motivo aparece en <span class="ui">⚙ Ajustes</span> → <i>Cuenta</i>.</td></tr>
+  </table></div>
+  <a class="top-link" href="#indice">↑ Índice</a>
+</section>
+
+<!-- ===================================================== -->
+<section class="chap" id="c2">
+  <h2><span class="n">2</span>La pantalla de inicio y la navegación</h2>
+  <p>La pantalla de inicio es un índice con tres botones:</p>
+  <ul>
+    <li><span class="ui">Partidos</span>: estadística de los partidos, calendario y totales (capítulos 3 a 6).</li>
+    <li><span class="ui">Entrenos</span>: planificación, biblioteca de ejercicios y minutos de los entrenos (capítulo 7).</li>
+    <li><span class="ui">Análisis - Vídeo</span>: marcar acciones, clips y dibujos sobre vídeos (capítulo 8).</li>
+  </ul>
+  <p>En la barra de arriba:</p>
+  <ul>
+    <li><span class="ui">‹</span> vuelve a la pantalla anterior.</li>
+    <li><span class="ui">↶</span> <b>Deshacer</b>: anula el último cambio del partido o entreno en curso (por ejemplo, un gol apuntado por error).</li>
+    <li><span class="ui">⚙</span> <b>Ajustes</b> (capítulo 9).</li>
+  </ul>
+  <a class="top-link" href="#indice">↑ Índice</a>
+</section>
+
+<!-- ===================================================== -->
+<section class="chap" id="c3">
+  <h2><span class="n">3</span>Partidos: el menú y el calendario</h2>
+  <p>Al entrar en <span class="ui">Partidos</span> verás, de arriba abajo:</p>
+  <ul>
+    <li><b>Próximo partido</b> (o <b>Continuar partido</b> si hay uno en curso): un toque y empiezas a registrar esa jornada con el rival, la fecha, la hora y el pabellón ya rellenados.</li>
+    <li><span class="ui">Totales</span>: la suma de todos los partidos (capítulo 6).</li>
+    <li><b>Calendario</b> de la OK Liga Iberdrola 2026/2027: un botón por jornada.</li>
+    <li><b>Historial</b> de partidos guardados.</li>
+    <li><span class="ui">+ Otro partido (amistoso, copa…)</span>: para partidos que no están en el calendario.</li>
+  </ul>
+  <h3>El calendario</h3>
+  <ul>
+    <li>🏠 partido en casa · ✈️ partido fuera.</li>
+    <li>Color de las jornadas jugadas: <span class="dot" style="background:#1f9d55"></span>victoria, <span class="dot" style="background:#e07b00"></span>empate, <span class="dot" style="background:#d64545"></span>derrota.</li>
+    <li>Toca una jornada jugada para ver su resumen; toca una pendiente para empezar a registrarla.</li>
+  </ul>
+  <div class="note"><b>Un partido a la vez</b>Solo puede haber un partido o entreno en curso. Si hay otro empezado, la app te avisa para que lo termines antes.</div>
+  <a class="top-link" href="#indice">↑ Índice</a>
+</section>
+
+<!-- ===================================================== -->
+<section class="chap" id="c4">
+  <h2><span class="n">4</span>Durante el partido</h2>
+
+  <h3 id="c4-convocatoria">Convocatoria</h3>
+  <p>Antes de empezar, elige las <b>convocadas</b> (máximo 10 de la plantilla). La app propone las del partido anterior. Toca <span class="ui">Confirmar</span>. Puedes cambiarla después en la pestaña <span class="ui">Datos</span> → <span class="ui">Cambiar convocatoria</span>.</p>
+
+  <h3 id="c4-reloj">Reloj, pista y banquillo</h3>
+  <ul>
+    <li><span class="ui">▶</span> pone en marcha el reloj; el mismo botón lo para (<span class="ui">❚❚</span>). Páralo cada vez que el árbitro pare el tiempo.</li>
+    <li>Toca una jugadora del <b>Banquillo</b> para meterla en pista; tócala en <b>En pista</b> para sacarla. Como máximo hay 5 en pista (4 jugadoras y la portera). Los minutos de cada una se cuentan solos mientras está en pista y el reloj corre.</li>
+    <li><b>Posesión</b>: toca <span class="ui">Nosotras</span> o <span class="ui">Rival</span> cuando cambie la posesión. Se muestra el porcentaje de cada equipo.</li>
+    <li><b>FE</b>: faltas de equipo de cada equipo en la parte actual.</li>
+  </ul>
+
+  <h3 id="c4-acciones">Registrar acciones</h3>
+  <p>En la pestaña <span class="ui">Pista</span> están los botones de las acciones. Al tocar uno, la app pregunta lo necesario. Al tocar la jugadora se guarda directamente.</p>
+  <div class="tbl"><table>
+    <tr><th>Botón</th><th>Qué pregunta</th></tr>
+    <tr><td><span class="ui">Gol a favor</span></td><td>Quién marca. Se guarda también el cinco que estaba en pista.</td></tr>
+    <tr><td><span class="ui">Gol en contra</span></td><td>Número de la rival (opcional).</td></tr>
+    <tr><td><span class="ui">Falta nuestra</span></td><td>Quién comete la falta.</td></tr>
+    <tr><td><span class="ui">Falta rival</span></td><td>Nada: se suma a sus faltas de equipo.</td></tr>
+    <tr><td><span class="ui">Falta directa / Penalti</span></td><td>Tipo, a favor o en contra, gol o fallado y la lanzadora. Si es gol, se suma también al marcador.</td></tr>
+    <tr><td><span class="ui">Tarjeta</span></td><td>Equipo, azul (2 min) o roja (4 min) y la jugadora sancionada.</td></tr>
+  </table></div>
+  <ul>
+    <li>Las <b>sanciones activas</b> aparecen bajo el reloj con su tiempo. Terminan solas al cumplirse; se pueden terminar antes tocándolas. Si el equipo con una tarjeta azul encaja un gol, la app pregunta si la sanción termina con ese gol.</li>
+    <li>La app calcula la <b>superioridad</b> (power play) y la <b>inferioridad</b> (under play) con el resultado al empezar y al terminar.</li>
+    <li>¿Te has equivocado? Pulsa <span class="ui">↶</span> (Deshacer) o borra el evento en la pestaña <span class="ui">Eventos</span>.</li>
+  </ul>
+
+  <h3 id="c4-pestanas">Las pestañas</h3>
+  <ul>
+    <li><span class="ui">Pista</span>: reloj, botones de acciones, en pista y banquillo.</li>
+    <li><span class="ui">Eventos</span>: lista de todo lo registrado, con su minuto; cada evento se puede borrar. Con <span class="ui">+ Añadir evento con minuto</span> se añade algo que se olvidó apuntar, indicando la parte y el minuto (por ejemplo, <i>12:30</i>).</li>
+    <li><span class="ui">Resumen</span>: la hoja de estadística completa, como la hoja Excel del club, con <span class="ui">Imprimir / PDF</span> y <span class="ui">CSV minutos</span>.</li>
+    <li><span class="ui">Datos</span>: rival, competición, jornada, fecha, hora, pabellón, convocatoria y observaciones.</li>
+  </ul>
+
+  <h3 id="c4-terminar">Fin de parte y terminar</h3>
+  <ul>
+    <li><span class="ui">Fin de parte</span>: cierra la parte y pasa a la siguiente (o a la prórroga).</li>
+    <li><span class="ui">Terminar</span>: guarda el partido en el historial y muestra el resumen.</li>
+  </ul>
+  <div class="tip"><b>Consejo para el banquillo</b>Deja la tablet con la pantalla encendida: mientras el reloj corre, la app evita que la pantalla se apague (en los navegadores que lo permiten).</div>
+  <a class="top-link" href="#indice">↑ Índice</a>
+</section>
+
+<!-- ===================================================== -->
+<section class="chap" id="c5">
+  <h2><span class="n">5</span>Después del partido: resumen y correcciones</h2>
+  <p>Toca un partido del calendario o del historial para abrir su <b>resumen</b>. Abajo tienes:</p>
+  <ul>
+    <li><span class="ui">Imprimir / PDF</span> y <span class="ui">CSV minutos</span> (los minutos de cada jugadora para Excel).</li>
+    <li><span class="ui">Editar datos</span>: corregir <b>todo</b> a mano (ver abajo).</li>
+    <li><span class="ui">Reabrir</span>: el partido vuelve a la pantalla de juego para corregirlo allí; los cambios se guardan al pulsar <span class="ui">Terminar</span> (o se anulan con <span class="ui">Descartar cambios</span>).</li>
+    <li><span class="ui">Borrar</span>: elimina el partido.</li>
+  </ul>
+
+  <h3>Editar datos: corregirlo todo a mano</h3>
+  <p>La ventana <b>Editar partido</b> tiene tres pestañas. Nada cambia hasta que pulsas <span class="ui">Guardar</span>; <span class="ui">Cancelar</span> lo deja todo como estaba.</p>
+  <h4>1. Datos</h4>
+  <p>Equipo, rival, competición, jornada, número de partido, fecha, hora, pabellón, <b>convocadas</b> y observaciones. Las jugadoras que tienen minutos no se pueden quitar de la convocatoria (primero pon sus minutos a 0).</p>
+  <h4>2. Minutos</h4>
+  <p>Los tiempos se escriben como <b>12:30</b> (minutos:segundos) o solo los minutos (<b>12</b>).</p>
+  <ul>
+    <li><b>Partes y posesión</b>: duración real de cada parte y posesión nuestra y del rival.</li>
+    <li><b>Minutos de cada jugadora</b>, parte por parte. El total se actualiza mientras escribes. En el resumen, esa parte aparecerá como «corregido a mano» en lugar de las entradas y salidas.</li>
+    <li><b>Cinco inicial</b> de cada parte (máximo 5).</li>
+  </ul>
+  <h4>3. Eventos</h4>
+  <p>Goles, faltas, faltas directas / penaltis y tarjetas. Cada uno tiene <span class="ui">Corregir</span> (parte, minuto, jugadora, tipo, gol o fallado…) y <span class="ui">Borrar</span>. Con <span class="ui">＋ Añadir evento</span> se añade uno que falte.</p>
+  <p>Al guardar, la app recalcula el marcador, el orden de los eventos y las superioridades/inferioridades, y el resumen y los Totales se actualizan.</p>
+  <div class="warn"><b>La app no deja guardar si…</b>hay un tiempo mal escrito (sale en rojo), una jugadora tiene más minutos que la duración de la parte, la posesión suma más que el tiempo jugado o un evento queda después del final de su parte.</div>
+  <a class="top-link" href="#indice">↑ Índice</a>
+</section>
+
+<!-- ===================================================== -->
+<section class="chap" id="c6">
+  <h2><span class="n">6</span>Totales</h2>
+  <p>En <span class="ui">Partidos</span> → <span class="ui">Totales</span> está la suma de todos los partidos guardados:</p>
+  <ul>
+    <li><b>Equipo</b>: partidos ganados, empatados y perdidos, goles a favor y en contra, posesión media, faltas de equipo, faltas directas y penaltis (con su eficacia), tarjetas, superioridades e inferioridades.</li>
+    <li><b>Jugadoras</b>: convocatorias, partidos jugados, veces titular, minutos, media por partido y porcentaje del tiempo, goles, faltas y tarjetas.</li>
+    <li><b>Lista de partidos</b> incluidos, con fecha, rival y resultado.</li>
+  </ul>
+  <p>Se actualiza sola cada vez que guardas o corriges un partido.</p>
+  <a class="top-link" href="#indice">↑ Índice</a>
+</section>
+
+<!-- ===================================================== -->
+<section class="chap" id="c7">
+  <h2><span class="n">7</span>Entrenos</h2>
+
+  <h3 id="c7-sinplan">Entreno sin plan</h3>
+  <p>En <span class="ui">Entrenos</span>, <span class="ui">Entreno sin plan</span> abre la pantalla de juego para <b>solo contar los minutos</b> de las jugadoras (todas convocadas). Funciona igual que en un partido: <span class="ui">▶</span>, meter y sacar jugadoras y <span class="ui">Terminar</span>.</p>
+
+  <h3 id="c7-plan">Planificar un entreno</h3>
+  <ol class="steps">
+    <li>Toca <span class="ui">＋ Planificar un entreno</span>.</li>
+    <li>Rellena la <b>fecha</b>, la <b>hora</b> y el <b>objetivo</b> (por ejemplo, «salida de presión»).</li>
+    <li>Añade ejercicios con <span class="ui">＋ Nuevo ejercicio</span> o <span class="ui">＋ Desde la biblioteca</span>. Cada ejercicio tiene nombre, duración, tipo (calentamiento, técnica, táctica, físico, porteras, juego, vuelta a la calma), descripción y dibujo. La duración total del plan se suma sola.</li>
+    <li>Añade <b>notas</b> (material, grupos…).</li>
+  </ol>
+  <p>Botones del plan: <span class="ui">▶ Empezar entreno</span> (abre la pantalla de juego unida al plan), <span class="ui">Imprimir / PDF</span>, <span class="ui">Duplicar</span> y <span class="ui">Borrar plan</span>. El entreno del día aparece arriba del menú de Entrenos.</p>
+
+  <h3 id="c7-biblio">Biblioteca de ejercicios</h3>
+  <p>Guarda ejercicios para reutilizarlos en otros planes. Se filtran por tipo. Al crear un ejercicio dentro de un plan, marca <span class="ui">Guardar también en la biblioteca</span> para tenerlo también allí.</p>
+
+  <h3 id="c7-dibujo">Dibujar en la pista y ejercicios con movimiento</h3>
+  <p>En un ejercicio, toca <span class="ui">✏️ Dibujar en la pista</span>. Herramientas:</p>
+  <div class="tbl"><table>
+    <tr><th>Herramienta</th><th>Para qué</th></tr>
+    <tr><td><span class="ui">● Nuestra</span> <span class="ui">P Portera</span> <span class="ui">● Rival</span> <span class="ui">• Bola</span> <span class="ui">▲ Cono</span></td><td>Toca en la pista para colocarlos.</td></tr>
+    <tr><td><span class="ui">→ Movimiento</span> <span class="ui">⇢ Pase</span> <span class="ui">〰 Conducción</span> <span class="ui">⇒ Tiro</span></td><td>Arrastra desde el inicio hasta el final de la flecha.</td></tr>
+    <tr><td><span class="ui">✋ Mover</span></td><td>Arrastra un elemento para moverlo (en las flechas, arrastra un extremo).</td></tr>
+    <tr><td><span class="ui">✕ Borrar</span> · <span class="ui">↶ Deshacer</span> · <span class="ui">🗑 Limpiar</span></td><td>Borrar un elemento, deshacer el último o borrarlo todo.</td></tr>
+  </table></div>
+  <h4>Ejercicios con movimiento (vídeo)</h4>
+  <ul>
+    <li>Cada flecha tiene un <b>paso</b> (1, 2, 3…). Las flechas del mismo paso se mueven a la vez; los pasos van uno detrás de otro. Elige el paso con <span class="ui">−</span>/<span class="ui">+</span> antes de dibujar la flecha, o cámbialo después con <span class="ui">Poner paso</span>.</li>
+    <li>Las jugadoras y la bola siguen sus flechas: la bola acompaña a quien conduce y viaja en los pases y tiros.</li>
+    <li><span class="ui">▶ Ver</span> reproduce el ejercicio. Los ejercicios con movimiento se guardan como <b>🎬 Vídeo</b>.</li>
+    <li><span class="ui">⬇ Vídeo</span> descarga el ejercicio en vídeo (MP4 o WebM) para compartirlo.</li>
+  </ul>
+  <a class="top-link" href="#indice">↑ Índice</a>
+</section>
+
+<!-- ===================================================== -->
+<section class="chap" id="c8">
+  <h2><span class="n">8</span>Análisis de vídeo</h2>
+  <p>Sirve para marcar las acciones de un vídeo, crear clips por tema y dibujar sobre la imagen. Las marcas, los clips y los dibujos se sincronizan con el equipo.</p>
+
+  <h3 id="c8-nuevo">Crear un análisis</h3>
+  <p>En <span class="ui">Análisis - Vídeo</span> toca <span class="ui">＋ Nuevo análisis</span>: título, fecha, <b>partido</b> del calendario (opcional; rellena el título y la fecha), teclado y de dónde es el vídeo:</p>
+  <div class="tbl"><table>
+    <tr><th>Fuente</th><th>Cómo funciona</th></tr>
+    <tr><td><span class="ui">Archivo (tablet / ordenador)</span></td><td>Eliges el archivo de vídeo del dispositivo. Todo funciona. El vídeo <b>no se sube</b> a la nube (es muy grande): en cada dispositivo hay que volver a elegir el archivo.</td></tr>
+    <tr><td><span class="ui">Enlace (tiivii)</span> 🔗</td><td>Pegas el enlace del vídeo en tiivii (uno por partido, por ejemplo <i>https://kennicut.tiivii.com/player/2204</i>). El vídeo se ve <b>dentro de la app</b> con todas las funciones y, como solo se guarda el enlace, está en todos los dispositivos. Necesita internet. Solo sirve con enlaces que se ven sin iniciar sesión.</td></tr>
+    <tr><td><span class="ui">OK Liga TV</span> 📺</td><td>OK Liga TV pide iniciar sesión y no deja que otra app controle su vídeo: se guarda el enlace y se marca con un cronómetro (ver <a href="#c8-okliga">OK Liga TV</a>).</td></tr>
+  </table></div>
+  <p>Controles del vídeo: <span class="ui">⏪ 5s</span>, <span class="ui">▶</span>, <span class="ui">5s ⏩</span>, velocidad (0,25× a 2×) y la barra para avanzar. <span class="ui">Editar datos</span> (arriba) cambia el título, el partido, la fuente o el enlace, o borra el análisis.</p>
+
+  <h3 id="c8-acciones">Marcar acciones</h3>
+  <ol class="steps">
+    <li>Reproduce el vídeo.</li>
+    <li>Cuando ocurra algo, toca su botón en <b>Marcar acción</b> (Gol a favor, Gol en contra, Remate, Ocasión, Pérdida, Recuperación, Falta, Bola parada, Defensa, Otro).</li>
+    <li>Escribe una nota si quieres (antes de elegir la jugadora) y toca la jugadora, o <span class="ui">Sin jugadora</span>.</li>
+  </ol>
+  <ul>
+    <li>En la pestaña <span class="ui">Acciones</span>, toca una acción para ir a ese momento (empieza unos segundos antes).</li>
+    <li>Filtra por tipo de acción o por jugadora.</li>
+    <li><span class="ui">▶ Ver seguidas</span> reproduce una detrás de otra todas las acciones filtradas (por ejemplo, todas las pérdidas de una jugadora).</li>
+  </ul>
+
+  <h3 id="c8-teclados">Teclados personalizados</h3>
+  <p>Encima de los botones aparece <b>Teclado: Estándar</b> con dos botones:</p>
+  <ul>
+    <li><span class="ui">Editar</span>: cambia los botones de este análisis: renombrar, cambiar el color (toca el círculo de color), ordenar (<span class="ui">↑</span> <span class="ui">↓</span>), quitar (<span class="ui">✕</span>) y <span class="ui">＋ Añadir botón</span>. Abajo se ve cómo quedará.
+      <ul>
+        <li><span class="ui">Usar en este partido</span>: solo para este análisis.</li>
+        <li><span class="ui">💾 Guardar con este nombre</span>: lo guarda (por ejemplo, «Ataque posicional») para usarlo en otros partidos. Si ya existe uno con ese nombre, pregunta si sustituirlo.</li>
+      </ul></li>
+    <li><span class="ui">Cambiar</span>: elige el Estándar o un teclado guardado; también <span class="ui">＋ Crear teclado nuevo</span> (vacío) y <span class="ui">Borrar</span> teclados guardados.</li>
+  </ul>
+  <p>Al crear un análisis nuevo se puede elegir el teclado; viene elegido el del último análisis. Las acciones ya marcadas mantienen su nombre y color aunque cambies de teclado.</p>
+
+  <h3 id="c8-marcador">Sumar al marcador del partido</h3>
+  <p>Solo con el teclado <b>Estándar</b> aparece la opción <span class="ui">Sumar al marcador y la estadística del partido</span> (desactivada por defecto). El análisis tiene que estar unido a una jornada (en <span class="ui">Editar datos</span>).</p>
+  <ul>
+    <li>Con la opción activada, <b>Gol a favor, Gol en contra, Falta y Bola parada</b> se suman también al partido de esa jornada. La app pide la <b>parte y el minuto del marcador</b> (el tiempo del vídeo no coincide con el reloj del partido, que se para) y lo necesario: quién marca, falta nuestra o rival, tipo de bola parada…</li>
+    <li>Las demás acciones (Remate, Pérdida…) se quedan solo en el análisis.</li>
+    <li>En la lista, esas acciones llevan «📊 En el marcador». Si borras la acción, también se quita del marcador.</li>
+    <li>Si la jornada no tenía datos, se crea el partido con los goles y faltas (sin minutos de jugadoras).</li>
+  </ul>
+  <div class="warn"><b>Cuidado con duplicar</b>Si el partido ya se registró en directo, los goles saldrían dos veces. La app avisa antes de activar la opción.</div>
+
+  <h3 id="c8-clips">Clips</h3>
+  <ol class="steps">
+    <li>Ve al inicio de la jugada y pulsa <span class="ui">✂️ Crear clip</span>.</li>
+    <li>Avanza hasta el final y pulsa <span class="ui">Marcar fin</span>.</li>
+    <li>Ponle nombre y <b>tema</b> (elige uno que ya exista o <span class="ui">＋ Otro tema</span>, por ejemplo «Salidas de presión»).</li>
+  </ol>
+  <p>En la pestaña <span class="ui">Clips</span> se agrupan por tema. Cada clip tiene <span class="ui">▶ Ver</span>, <span class="ui">⬇ Descargar</span> (vídeo con los dibujos incluidos), <span class="ui">Editar</span> y <span class="ui">Borrar</span>. <span class="ui">⬇ Descargar todos</span> graba todos los clips (o los del tema elegido): en tablet o móvil se comparten juntos; en el ordenador se descarga un .zip.</p>
+  <div class="note"><b>La descarga tarda lo que dura el clip</b>Para crear el archivo, la app reproduce el clip mientras lo graba. Mantén la app abierta hasta que termine.</div>
+
+  <h3 id="c8-dibujar">Dibujar sobre el vídeo</h3>
+  <ul>
+    <li>Pausa en el momento deseado y pulsa <span class="ui">✏️ Dibujar</span>.</li>
+    <li>Herramientas: <span class="ui">➜ Flecha</span>, <span class="ui">／ Línea</span>, <span class="ui">◯ Círculo</span> y <span class="ui">✎ Lápiz</span>, en varios colores, con deshacer.</li>
+    <li>El dibujo se guarda en ese momento del vídeo y aparece en la lista como «✏️ Dibujo».</li>
+    <li>Con <span class="ui">Pararse en los dibujos</span> activado, al reproducir el vídeo se para unos segundos en cada dibujo.</li>
+  </ul>
+
+  <h3 id="c8-okliga">OK Liga TV</h3>
+  <ol class="steps">
+    <li>Pulsa <span class="ui">Abrir el partido en OK Liga TV ↗</span> e inicia sesión allí.</li>
+    <li>Pulsa <span class="ui">▶</span> en el cronómetro de la app <b>a la vez</b> que en el vídeo. Con <span class="ui">−5s</span> / <span class="ui">+5s</span> se ajusta.</li>
+    <li>Marca las acciones con los botones: se guardan con el tiempo del cronómetro.</li>
+  </ol>
+  <p>Con OK Liga TV no se puede ver el vídeo dentro de la app, ni dibujar ni descargar clips. Si tienes el partido también en tiivii o en un archivo, usa esa fuente.</p>
+  <a class="top-link" href="#indice">↑ Índice</a>
+</section>
+
+<!-- ===================================================== -->
+<section class="chap" id="c9">
+  <h2><span class="n">9</span>Ajustes, copia de seguridad y cuentas</h2>
+  <p>Toca <span class="ui">⚙</span> arriba a la derecha.</p>
+  <ul>
+    <li><b>Duración de cada parte</b> (en minutos; 0 = sin límite) y <b>número de partes</b>.</li>
+    <li><b>Cuenta</b>: tu email y el estado de la sincronización, <span class="ui">Sincronizar ahora</span> y <span class="ui">Cerrar sesión</span>. Al cerrar sesión, los datos del dispositivo se mantienen.</li>
+    <li><b>Sin conexión</b>: indica si la app está lista para usarse sin internet.</li>
+    <li><b>Copia de seguridad</b>: <span class="ui">Exportar copia</span> guarda un archivo con todo (partidos, partido en curso, planes, ejercicios, análisis y teclados). <span class="ui">Importar copia</span> lo recupera en este u otro dispositivo, sin borrar lo que ya hay.</li>
+    <li><span class="ui">Reiniciar sesión</span>: borra el partido o entreno en curso <b>sin guardarlo</b>. Úsalo solo si se empezó por error.</li>
+  </ul>
+  <div class="tip"><b>Recomendación</b>Aunque los datos se guardan en la nube, exporta una copia de seguridad de vez en cuando (por ejemplo, una vez al mes).</div>
+  <a class="top-link" href="#indice">↑ Índice</a>
+</section>
+
+<!-- ===================================================== -->
+<section class="chap" id="c10">
+  <h2><span class="n">10</span>Problemas frecuentes</h2>
+  <h4>No veo una función nueva</h4>
+  <p>La versión nueva aparece la siguiente vez que se abre la app. Ábrela con internet, ciérrala del todo y vuelve a abrirla.</p>
+  <h4>La app no abre sin internet</h4>
+  <p>Hay que abrirla al menos una vez con internet en ese dispositivo (y esperar unos segundos). Compruébalo en <span class="ui">⚙ Ajustes</span> → <i>Sin conexión</i>.</p>
+  <h4>El punto de sincronización está rojo</h4>
+  <p>Abre <span class="ui">⚙ Ajustes</span> → <i>Cuenta</i>: ahí aparece el motivo. Prueba <span class="ui">Sincronizar ahora</span>. Si sigue en rojo, envía ese mensaje a la administradora de la app.</p>
+  <h4>Me he equivocado al registrar algo durante el partido</h4>
+  <p>Pulsa <span class="ui">↶</span> (Deshacer) o borra el evento en <span class="ui">Eventos</span>. Si el partido ya terminó, usa <span class="ui">Editar datos</span> (capítulo 5).</p>
+  <h4>Una jugadora no aparece para meterla en pista</h4>
+  <p>Solo aparecen las convocadas: cambia la convocatoria en <span class="ui">Datos</span> → <span class="ui">Cambiar convocatoria</span>.</p>
+  <h4>El vídeo de tiivii no carga</h4>
+  <p>Comprueba que hay internet y que el enlace se ve en tiivii sin iniciar sesión. Pulsa <span class="ui">Reintentar</span> o cambia el enlace en <span class="ui">Editar datos</span>.</p>
+  <h4>Cambio de tablet o de móvil</h4>
+  <p>Instala la app en el dispositivo nuevo e inicia sesión: los datos se descargan de la nube. Sin cuenta, usa <span class="ui">Exportar copia</span> en el antiguo e <span class="ui">Importar copia</span> en el nuevo.</p>
+  <a class="top-link" href="#indice">↑ Índice</a>
+</section>
+
+<!-- ===================================================== -->
+<section class="chap" id="c11">
+  <h2><span class="n">11</span>Novedades</h2>
+  <p>Cambios de la app, del más reciente al más antiguo.</p>
+  <!-- Añadir aquí cada cambio nuevo (arriba del todo) y actualizar la fecha de la portada -->
+  <dl class="log">
+    <dt>22/11/2026</dt>
+    <dd><ul><li>Este manual de uso, dentro de la app (botón <span class="ui">📖 Manual de uso</span> en la pantalla de inicio y en Ajustes).</li></ul></dd>
+    <dt>20/11/2026</dt>
+    <dd><ul>
+      <li>Análisis de vídeo: nueva fuente <b>Enlace (tiivii)</b>, que se ve dentro de la app con todas las funciones.</li>
+      <li>Cuentas: los datos de dos cuentas ya no se mezclan en el mismo dispositivo.</li>
+      <li>Partidos: <b>Editar datos</b> permite corregir todo a mano (minutos, partes, posesión, cinco inicial y eventos).</li>
+      <li>Análisis de vídeo: opción de <b>sumar al marcador</b> y la estadística del partido con el teclado Estándar.</li>
+      <li>Análisis de vídeo: <b>teclados personalizados</b> por partido y guardados con nombre.</li>
+      <li>Análisis de vídeo: descargar todos los clips de una vez.</li>
+    </ul></dd>
+    <dt>17/11/2026</dt>
+    <dd><ul>
+      <li>Nueva sección <b>Análisis - Vídeo</b>: marcar acciones, clips por tema y dibujos sobre el vídeo (archivos y OK Liga TV).</li>
+      <li>Entrenos: ejercicios con movimiento (pasos) y descarga del ejercicio en vídeo.</li>
+    </ul></dd>
+    <dt>16/11/2026</dt>
+    <dd><ul>
+      <li>Entrenos: planificación, biblioteca de ejercicios y dibujo en la pista.</li>
+      <li>Corregir partidos terminados: editar datos, reabrir y añadir eventos con minuto.</li>
+      <li>Calendario de la OK Liga Iberdrola 2026/2027 con colores por resultado y 🏠/✈️.</li>
+      <li>Nueva pantalla de inicio con Partidos y Entrenos.</li>
+      <li>Cuentas y sincronización en la nube entre dispositivos.</li>
+    </ul></dd>
+    <dt>13–14/11/2026</dt>
+    <dd><ul>
+      <li>Primera versión: minutos de juego y hoja de estadística completa.</li>
+      <li>Escudo y nombre del Telecable HC, convocatoria de 10 y Totales.</li>
+      <li>Funciona sin internet y copia de seguridad.</li>
+    </ul></dd>
+  </dl>
+  <a class="top-link" href="#indice">↑ Índice</a>
+</section>
+
+<footer>Telecable HC · Manual de uso de la app</footer>
+</main>
+<script>
+  // Dentro de la app instalada, "Volver" regresa a la pantalla anterior si se vino desde la app
+  document.getElementById('backApp').addEventListener('click', (e) => {
+    if (document.referrer && new URL(document.referrer).origin === location.origin && history.length > 1) { e.preventDefault(); history.back(); }
+  });
+</script>
+</body>
+</html>

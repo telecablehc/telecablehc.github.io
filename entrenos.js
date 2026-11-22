@@ -491,7 +491,7 @@ function itemMarkup(it, id, idx, opts = {}) {
     case 'own': return g(`<circle cx="${X}" cy="${Y}" r="0.75" fill="#d0102a" stroke="#fff" stroke-width="0.12"/>${label(it.n, '#fff')}`);
     case 'gk': return g(`<circle cx="${X}" cy="${Y}" r="0.75" fill="#f2b705" stroke="#fff" stroke-width="0.12"/>${label('P', '#111')}`);
     case 'opp': return g(`<circle cx="${X}" cy="${Y}" r="0.75" fill="#1f4fa8" stroke="#fff" stroke-width="0.12"/>${label(it.n, '#fff')}`);
-    case 'ball': return g(`<circle cx="${X}" cy="${Y}" r="0.32" fill="#ff7a00" stroke="#111" stroke-width="0.08"/>`);
+    case 'ball': return g(`<circle cx="${X}" cy="${Y}" r="0.32" fill="#111" stroke="#fff" stroke-width="0.08"/>`);
     case 'cone': return g(`<path d="M${X},${Y - 0.6} L${X + 0.5},${Y + 0.4} L${X - 0.5},${Y + 0.4} Z" fill="#ffd400" stroke="#111" stroke-width="0.08"/>`);
     default: {
       const X2 = it.x2 * 40, Y2 = it.y2 * 20;

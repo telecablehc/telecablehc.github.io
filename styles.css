@@ -461,7 +461,7 @@ dialog.draw-dialog { width: min(1100px, calc(100vw - 12px)); max-height: 96vh; p
 .tool-own .tool-icon { color: #d0102a; }
 .tool-opp .tool-icon { color: #1f4fa8; }
 .tool-gk .tool-icon { color: #b8860b; }
-.tool-ball .tool-icon { color: #ff7a00; font-size: 26px; line-height: .8; }
+.tool-ball .tool-icon { color: #111; -webkit-text-stroke: 2px #fff; paint-order: stroke fill; font-size: 26px; line-height: .8; }
 .tool-cone .tool-icon { color: #e0b800; }
 .tool.active .tool-icon { color: #fff; }
 .tool.danger { color: var(--warn); }

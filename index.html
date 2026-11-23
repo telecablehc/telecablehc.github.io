@@ -199,6 +199,7 @@
       <div class="va-stage clip-stage">
         <video id="clipVideo" playsinline preload="auto"></video>
         <svg id="clipOverlay" class="va-overlay" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="clipCaption" class="clip-caption" hidden></div>
       </div>
       <input id="clipSeek" type="range" min="0" max="1000" value="0">
       <div class="va-controls clip-controls">
@@ -212,6 +213,15 @@
         <label class="check"><input type="checkbox" id="clipLoop" checked> Repetir</label>
         <span class="spacer"></span>
         <button type="button" id="clipDl" class="ghost">⬇ Descargar</button>
+      </div>
+      <div class="clip-caps">
+        <div class="clip-caps-head">
+          <b>Leyendas</b>
+          <small>Salen unos segundos sin parar el vídeo (también en el clip descargado)</small>
+          <span class="spacer"></span>
+          <button type="button" id="clipCapAdd" class="primary small-btn">＋ Leyenda aquí</button>
+        </div>
+        <div id="clipCapList"></div>
       </div>
     </dialog>
 

@@ -666,7 +666,7 @@ function renderClips(v) {
           <button class="ghost small danger va-c-del">Borrar</button>
         </div>`;
       row.querySelector('b').textContent = c.nombre;
-      row.querySelector('small').textContent = `${fmtVT(c.inicio)} – ${fmtVT(c.fin)} · ${Math.round(c.fin - c.inicio)} s${nDraw ? ` · ✏️ ${nDraw} dibujo${nDraw > 1 ? 's' : ''}` : ''}`;
+      row.querySelector('small').textContent = `${fmtVT(c.inicio)} – ${fmtVT(c.fin)} · ${Math.round(c.fin - c.inicio)} s${nDraw ? ` · ✏️ ${nDraw} dibujo${nDraw > 1 ? 's' : ''}` : ''}${(c.leyendas || []).length ? ` · 💬 ${c.leyendas.length} leyenda${c.leyendas.length > 1 ? 's' : ''}` : ''}`;
       const play = row.querySelector('.va-c-play');
       if (canPlay) play.onclick = () => openClipWindow(c);
       else if (playsInApp(v)) play.onclick = () => notLoaded(v);
@@ -967,10 +967,21 @@ async function recordClip(clip, onProgress = () => {}, isCancelled = () => false
   const paint = () => {
     ctx.drawImage(video, 0, 0, W, H);
     if (overlay) ctx.drawImage(overlay, 0, 0, W, H);
+    const caps = capsAt(clip, video.currentTime);
+    if (caps.length) paintCaption(ctx, W, H, caps[caps.length - 1]);
   };
   const frame = () => new Promise((r) => requestAnimationFrame(r));
-  // play() a veces no responde (vídeo por enlace): no se espera más de 1,5 s
-  const play = () => Promise.race([video.play().catch(() => {}), new Promise((r) => setTimeout(r, 1500))]);
+  // play() a veces no responde (vídeo por enlace): no se espera más de 1,5 s.
+  // Si el navegador no deja reproducir con sonido, se graba sin sonido.
+  const wasMuted = video.muted;
+  const play = async () => {
+    const r = await Promise.race([video.play().then(() => 'ok', (e) => e), new Promise((res) => setTimeout(() => res('lento'), 1500))]);
+    if (r && r.name === 'NotAllowedError') {
+      video.muted = true;
+      await Promise.race([video.play().catch(() => {}), new Promise((res) => setTimeout(res, 1500))]);
+    }
+  };
+  let lastT = -1, stuckSince = performance.now();
 
   await seekTo(clip.inicio);
   paint();
@@ -990,6 +1001,16 @@ async function recordClip(clip, onProgress = () => {}, isCancelled = () => false
   for (;;) {
     if (isCancelled()) { cancelled = true; break; }
     if (video.currentTime >= clip.fin || video.ended) break;
+    // si el vídeo no avanza (sin conexión, el navegador no deja reproducir…), se reintenta y al final se avisa
+    if (video.currentTime !== lastT) { lastT = video.currentTime; stuckSince = performance.now(); }
+    else if (performance.now() - stuckSince > 4000) {
+      if (performance.now() - stuckSince > 12000) {
+        video.pause(); video.muted = wasMuted; rec.stop(); await finished;
+        stream.getVideoTracks().forEach((tr) => tr.stop());
+        throw new Error('el vídeo no avanza (¿sin conexión?). Inténtalo otra vez.');
+      }
+      if (video.paused) await play();
+    }
     if (next < draws.length && video.currentTime >= draws[next].t) {
       video.pause();
       overlay = images[draws[next].id];
@@ -1002,12 +1023,14 @@ async function recordClip(clip, onProgress = () => {}, isCancelled = () => false
       overlay = null;
       next++;
       await play();
+      stuckSince = performance.now();
     }
     paint();
     onProgress((video.currentTime - clip.inicio) / (clip.fin - clip.inicio), false);
     await frame();
   }
   video.pause();
+  video.muted = wasMuted;
   rec.stop();
   await finished;
   stream.getVideoTracks().forEach((tr) => tr.stop());
@@ -1303,7 +1326,10 @@ function openClipWindow(c) {
   const start = () => { if (!clipWin) return; video.currentTime = c.inicio; video.play().catch(() => {}); };
   if (video.readyState >= 1) start(); else video.addEventListener('loadedmetadata', start, { once: true });
   $('dlgClip').showModal();
+  renderClipCaps();
   clipTick();
+  const loop = () => { if (!clipWin || !$('dlgClip').open) { $('clipCaption').hidden = true; return; } renderClipCaption(); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
 }
 
 function closeClipSource() {
@@ -1325,6 +1351,102 @@ function showClipOverlay(dibujo) {
   layoutOverlay(video, svg);
   svg.innerHTML = dibujo ? overlayMarkup(dibujo.items, video.videoWidth / video.videoHeight || 16 / 9) : '';
   svg.classList.toggle('visible', !!dibujo);
+}
+
+// ---------- Leyendas de un clip (subtítulos con tiempo; no paran el vídeo) ----------
+// clip.leyendas = [{ id, t, dur, txt, pos: 'abajo' | 'arriba' }] (t en segundos del vídeo)
+const CAP_DUR = 3;
+const capsAt = (clip, t) => (clip.leyendas || []).filter((l) => t >= l.t && t < l.t + l.dur);
+
+function renderClipCaption() {
+  const el = $('clipCaption');
+  if (!clipWin) { el.hidden = true; return; }
+  const caps = capsAt(clipWin.clip, $('clipVideo').currentTime);
+  el.hidden = !caps.length;
+  if (!caps.length) return;
+  const l = caps[caps.length - 1];
+  el.textContent = l.txt;
+  el.classList.toggle('top', l.pos === 'arriba');
+}
+
+function renderClipCaps() {
+  if (!clipWin) return;
+  const c = clipWin.clip, list = (c.leyendas || []).slice().sort((a, b) => a.t - b.t);
+  const box = $('clipCapList');
+  if (!list.length) {
+    box.innerHTML = '<p class="hint">Sin leyendas. Ve al momento del clip y pulsa «＋ Leyenda aquí».</p>';
+    return;
+  }
+  box.replaceChildren(...list.map((l) => {
+    const row = document.createElement('div');
+    row.className = 'clip-cap';
+    row.innerHTML = '<button type="button" class="clip-cap-go"><b></b><span></span></button><button type="button" class="ghost small">Editar</button><button type="button" class="ghost small danger">Borrar</button>';
+    row.querySelector('b').textContent = `${fmtVT(l.t - c.inicio)} – ${fmtVT(l.t - c.inicio + l.dur)}${l.pos === 'arriba' ? ' · arriba' : ''}`;
+    row.querySelector('span').textContent = l.txt;
+    row.querySelector('.clip-cap-go').onclick = () => { const v = $('clipVideo'); v.currentTime = l.t; clipWin.last = l.t; renderClipCaption(); };
+    row.querySelector('.ghost:not(.danger)').onclick = () => editClipCaption(l);
+    row.querySelector('.danger').onclick = () => {
+      if (!confirm(`¿Borrar la leyenda «${l.txt}»?`)) return;
+      saveClipCaptions((caps) => caps.filter((x) => x.id !== l.id));
+    };
+    return row;
+  }));
+}
+
+// Guarda las leyendas del clip abierto (y lo vuelve a leer)
+function saveClipCaptions(fn) {
+  const id = clipWin.clip.id;
+  updateVideo((x) => { const c = x.clips.find((y) => y.id === id); if (c) c.leyendas = fn(c.leyendas || []); });
+  const fresh = curVideo().clips.find((y) => y.id === id);
+  if (fresh && clipWin) clipWin.clip = fresh;
+  renderClipCaps();
+  renderClipCaption();
+}
+
+// Añadir (en el momento actual del clip) o cambiar una leyenda. El vídeo sigue reproduciéndose.
+async function editClipCaption(old = null) {
+  if (!clipWin) return;
+  const c = clipWin.clip, video = $('clipVideo');
+  const len = c.fin - c.inicio;
+  const here = Math.min(Math.max(0, video.currentTime - c.inicio), Math.max(0, len - 0.5));
+  const ans = await ask(old ? 'Cambiar leyenda' : 'Nueva leyenda', [
+    { key: 'txt', type: 'text', label: old ? 'Texto (vacío = borrar)' : 'Texto', required: !old, placeholder: 'Ej.: Fíjate en la vigilancia de la 9', maxLength: 90 },
+    { key: 'ini', type: 'num', label: 'Empieza en (mm:ss del clip)', required: true, placeholder: '00:02' },
+    { key: 'dur', type: 'num', label: 'Duración (segundos)', required: true, placeholder: String(CAP_DUR) },
+    { key: 'pos', type: 'seg', label: 'Posición', options: [['abajo', 'Abajo'], ['arriba', 'Arriba']] },
+  ], { txt: old ? old.txt : '', ini: fmtVT(old ? old.t - c.inicio : here), dur: String(old ? old.dur : CAP_DUR), pos: old ? old.pos || 'abajo' : 'abajo' });
+  if (!ans || !clipWin) return;
+  const txt = (ans.txt || '').trim();
+  const ini = parseVT(ans.ini), dur = parseFloat(String(ans.dur).replace(',', '.'));
+  if (old && !txt) { saveClipCaptions((caps) => caps.filter((x) => x.id !== old.id)); return; }
+  if (!txt) return;
+  if (ini == null || ini > len) { alert(`El inicio tiene que estar dentro del clip (00:00 – ${fmtVT(len)}).`); return; }
+  if (!(dur > 0) || dur > 60) { alert('La duración tiene que ser entre 1 y 60 segundos.'); return; }
+  const item = { id: old ? old.id : uid(), t: c.inicio + ini, dur: Math.min(dur, len - ini) || dur, txt, pos: ans.pos === 'arriba' ? 'arriba' : 'abajo' };
+  saveClipCaptions((caps) => [...caps.filter((x) => x.id !== item.id), item]);
+  toast(old ? 'Leyenda cambiada' : 'Leyenda añadida');
+}
+
+// Leyenda dibujada en el vídeo descargado (mismo estilo que en pantalla)
+function paintCaption(ctx, W, H, l) {
+  const size = Math.round(H * 0.055), pad = Math.round(size * 0.45), maxW = W * 0.9;
+  ctx.save();
+  ctx.font = `bold ${size}px Arial, Helvetica, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // partir en líneas que quepan
+  const words = l.txt.split(/\s+/), lines = [];
+  let cur = '';
+  words.forEach((w) => { const t = cur ? cur + ' ' + w : w; if (ctx.measureText(t).width > maxW - pad * 2 && cur) { lines.push(cur); cur = w; } else cur = t; });
+  if (cur) lines.push(cur);
+  const lh = size * 1.25, boxH = lines.length * lh + pad * 1.2;
+  const boxW = Math.min(maxW, Math.max(...lines.map((s) => ctx.measureText(s).width)) + pad * 2);
+  const y0 = l.pos === 'arriba' ? H * 0.05 : H * 0.95 - boxH;
+  ctx.fillStyle = 'rgba(0,0,0,.72)';
+  ctx.fillRect((W - boxW) / 2, y0, boxW, boxH);
+  ctx.fillStyle = '#fff';
+  lines.forEach((s, i) => ctx.fillText(s, W / 2, y0 + pad * 0.6 + lh * (i + 0.5)));
+  ctx.restore();
 }
 
 function clipTick() {
@@ -1392,6 +1514,7 @@ function initClipWindow() {
   $('clipSpeed').onchange = () => { video.playbackRate = +$('clipSpeed').value; };
   $('clipDl').onclick = () => { if (!clipWin) return; const c = clipWin.clip; closeClipWindow(); downloadClip(c, $('clipDl')); };
   $('clipClose').onclick = closeClipWindow;
+  $('clipCapAdd').onclick = () => editClipCaption(null);
   $('dlgClip').addEventListener('close', closeClipSource);
   window.addEventListener('resize', () => { if (clipWin && $('clipOverlay').classList.contains('visible')) layoutOverlay(video, $('clipOverlay')); });
 }

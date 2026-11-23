@@ -588,6 +588,17 @@ dialog.clip-dialog { width: min(1100px, calc(100vw - 12px)); max-height: 96vh; p
 .clip-stage video { max-height: 70vh; }
 #clipSeek { width: 100%; margin: 8px 0 4px; }
 .clip-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.clip-stage { position: relative; }
+.clip-caption { position: absolute; left: 50%; bottom: 5%; transform: translateX(-50%); max-width: 90%; padding: 6px 14px; border-radius: 6px;
+  background: rgba(0,0,0,.72); color: #fff; font: 700 clamp(15px, 2.6vw, 26px)/1.25 Arial, Helvetica, sans-serif; text-align: center; pointer-events: none; }
+.clip-caption.top { bottom: auto; top: 5%; }
+.clip-caps { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.clip-caps-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.clip-caps-head small { color: var(--muted); font-size: 12px; }
+.clip-cap { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.clip-cap-go { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: baseline; text-align: left; background: none; border: 0; padding: 6px 2px; color: var(--text); }
+.clip-cap-go b { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; color: var(--muted); }
+.clip-cap-go span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .va-playbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .va-stat { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; margin: 0 0 10px; font-size: 14px; }
 .va-stat label { display: flex; align-items: center; gap: 8px; font-weight: 600; }

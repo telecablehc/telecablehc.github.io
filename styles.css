@@ -602,6 +602,10 @@ dialog.clip-dialog { width: min(1100px, calc(100vw - 12px)); max-height: 96vh; p
 .va-volbox { display: inline-flex; align-items: center; gap: 4px; }
 .va-mute { padding: 6px 9px; font-size: 18px; line-height: 1; }
 .va-controls input.va-vol { flex: 0 0 90px; order: 0; width: 90px; accent-color: var(--brand); }
+.va-key { display: inline-block; margin-left: 6px; min-width: 18px; padding: 0 4px; border-radius: 4px; border: 1px solid currentColor; font: 700 11px/16px system-ui, sans-serif; opacity: .7; vertical-align: 1px; }
+@media (hover: none) { .va-key { display: none; } } /* en tablet/móvil no hay teclado físico */
+.va-tag.pressed { transform: scale(.94); filter: brightness(1.25); }
+.kb-row input.kb-key { flex: 0 0 52px; width: 52px; text-align: center; text-transform: uppercase; font-weight: 700; padding: 9px 4px; }
 .va-playbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .va-stat { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; margin: 0 0 10px; font-size: 14px; }
 .va-stat label { display: flex; align-items: center; gap: 8px; font-weight: 600; }

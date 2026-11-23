@@ -28,12 +28,16 @@ const markType = (k) => MARK_TYPES.find((m) => m[0] === k) || ['otro', 'Otro', '
 // Los teclados se pueden guardar con un nombre (biblioteca, se sincroniza) para elegirlos en otro partido.
 // Cada acción guarda su nombre y color, así no cambia aunque luego se cambie el teclado.
 const KEY_KEYBOARDS = 'hoquei.teclados';
-const STD_KEYBOARD = { nombre: 'Estándar', botones: MARK_TYPES.map(([k, label, color]) => ({ k, label, color })) };
+// tecla: atajo en el teclado del ordenador (una letra o un número). En el estándar, 1–9 y 0.
+const STD_KEYBOARD = { nombre: 'Estándar', botones: MARK_TYPES.map(([k, label, color], i) => ({ k, label, color, tecla: String((i + 1) % 10) })) };
+const normKey = (t) => (/^[a-z0-9ñ]$/i.test(t || '') ? t.toUpperCase() : '');
 const KB_COLORS = ['#1f9d55', '#d64545', '#2f6fdb', '#7b3fe4', '#e07b00', '#14a3a3', '#8a6d3b', '#b8860b', '#5f7d8c', '#e83e8c', '#20c997', '#888888'];
 const loadKeyboards = () => load(KEY_KEYBOARDS, []);
-const keyboardOf = (v) => (v && v.teclado && v.teclado.botones.length ? v.teclado : STD_KEYBOARD);
-const STD_JSON = JSON.stringify(STD_KEYBOARD.botones);
-const isStdKb = (v) => !v || !v.teclado || (!v.tecladoId && JSON.stringify(v.teclado.botones) === STD_JSON);
+const keyboardOf = (v) => (v && v.teclado && v.teclado.botones.length && !isStdKb(v) ? v.teclado : STD_KEYBOARD);
+// (se compara sin las teclas: los análisis antiguos guardaron el estándar sin atajos)
+const kbShape = (botones) => JSON.stringify(botones.map(({ k, label, color }) => ({ k, label, color })));
+const STD_JSON = kbShape(STD_KEYBOARD.botones);
+const isStdKb = (v) => !v || !v.teclado || (!v.tecladoId && kbShape(v.teclado.botones) === STD_JSON);
 // Con el teclado estándar, estas acciones pueden sumar al marcador y la estadística del partido
 const STAT_MARKS = ['golFavor', 'golContra', 'falta', 'bolaParada'];
 const feedsStats = (v) => !!(v && v.alimentar && isStdKb(v) && v.partido);
@@ -308,11 +312,16 @@ function renderAnalysis() {
   // Botones de acciones (teclado de este análisis)
   const kb = keyboardOf(v);
   $('vaKbName').textContent = kb.nombre || 'Sin nombre';
-  $('vaTags').replaceChildren(...kb.botones.map(({ k, label, color }) => {
+  $('vaTags').replaceChildren(...kb.botones.map(({ k, label, color, tecla }) => {
     const b = document.createElement('button');
     b.className = 'va-tag';
+    b.dataset.k = k;
     b.style.setProperty('--tc', color);
     b.textContent = label;
+    if (normKey(tecla)) {
+      const key = Object.assign(document.createElement('kbd'), { className: 'va-key', textContent: normKey(tecla), title: `Atajo: tecla ${normKey(tecla)}` });
+      b.append(key);
+    }
     b.disabled = file && !loaded;
     b.onclick = () => addMark(k);
     return b;
@@ -1238,11 +1247,16 @@ function openKeyboardEditor(kbIn, fromId = null, isNew = false) {
       color.onclick = () => { b.color = KB_COLORS[(KB_COLORS.indexOf(b.color) + 1) % KB_COLORS.length]; draw(); };
       const input = Object.assign(document.createElement('input'), { type: 'text', value: b.label, placeholder: 'Nombre del botón' });
       input.oninput = () => { b.label = input.value; drawPreview(); };
+      // atajo en el teclado del ordenador
+      const key = Object.assign(document.createElement('input'), { type: 'text', className: 'kb-key', value: normKey(b.tecla), maxLength: 1, placeholder: 'Tecla',
+        title: 'Atajo en el teclado del ordenador: una letra o un número (opcional)' });
+      key.setAttribute('aria-label', 'Tecla de atajo');
+      key.oninput = () => { const t = normKey(key.value.slice(-1)); key.value = t; if (t) b.tecla = t; else delete b.tecla; };
       const btn = (txt, title, fn, cls = '') => Object.assign(document.createElement('button'), { className: 'ghost small ' + cls, textContent: txt, title, onclick: fn });
       const up = btn('↑', 'Subir', () => { [kb.botones[i - 1], kb.botones[i]] = [kb.botones[i], kb.botones[i - 1]]; draw(); });
       const down = btn('↓', 'Bajar', () => { [kb.botones[i + 1], kb.botones[i]] = [kb.botones[i], kb.botones[i + 1]]; draw(); });
       up.disabled = i === 0; down.disabled = i === kb.botones.length - 1;
-      r.append(color, input, up, down, btn('✕', 'Quitar', () => { kb.botones.splice(i, 1); draw(); }, 'danger'));
+      r.append(color, input, key, up, down, btn('✕', 'Quitar', () => { kb.botones.splice(i, 1); draw(); }, 'danger'));
       return r;
     }));
     drawPreview();
@@ -1261,6 +1275,9 @@ function openKeyboardEditor(kbIn, fromId = null, isNew = false) {
     if (kb.botones.some((b) => !b.label)) { alert('Todos los botones necesitan un nombre.'); return false; }
     const names = kb.botones.map((b) => b.label.toLowerCase());
     if (new Set(names).size !== names.length) { alert('Hay dos botones con el mismo nombre.'); return false; }
+    const keys = kb.botones.map((b) => normKey(b.tecla)).filter(Boolean);
+    const dup = keys.find((k, i) => keys.indexOf(k) !== i);
+    if (dup) { alert(`La tecla «${dup}» está en dos botones. Cada atajo tiene que ser distinto.`); return false; }
     return true;
   };
   $('kbAdd').onclick = () => {
@@ -1555,8 +1572,27 @@ function initVolume() {
   applyVolume();
 }
 
+// ---------- Atajos de teclado (ordenador): la tecla de un botón marca esa acción ----------
+function onShortcutKey(ev) {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.repeat) return;
+  if ($('screen-analisis').hidden || document.querySelector('dialog[open]')) return;
+  const tag = (ev.target && ev.target.tagName) || '';
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) || (ev.target && ev.target.isContentEditable)) return;
+  const v = curVideo();
+  const key = normKey(ev.key);
+  if (!v || !key || vaDrawing) return;
+  const btn = keyboardOf(v).botones.find((b) => normKey(b.tecla) === key);
+  if (!btn) return;
+  ev.preventDefault();
+  const el = $('vaTags').querySelector(`[data-k="${CSS.escape(btn.k)}"]`);
+  if (el) { el.classList.add('pressed'); setTimeout(() => el.classList.remove('pressed'), 180); }
+  if (playsInApp(v) && !loadedFiles[v.id]) { notLoaded(v); return; }
+  addMark(btn.k);
+}
+
 function initVideo() {
   initClipWindow();
+  document.addEventListener('keydown', onShortcutKey);
   initVolume();
   $('vNew').onclick = () => openVideoDialog();
   $('vaKbChange').onclick = openKeyboardPicker;

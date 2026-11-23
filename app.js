@@ -510,7 +510,8 @@ function deleteEvent(id) {
 }
 
 // ---------- Diálogo genérico ----------
-// fields: { key, label, type: 'seg' | 'player' | 'num', options?, show?(vals) }
+// fields: { key, label, type: 'seg' | 'player' | 'num' | 'text', options?, show?(vals) }
+// ('num' abre el teclado numérico; 'text', el normal)
 // Al tocar una jugadora se guarda directamente si ya está todo elegido.
 
 function ask(title, fields, initial = {}) {
@@ -521,7 +522,7 @@ function ask(title, fields, initial = {}) {
     const visible = () => fields.filter((f) => !f.show || f.show(vals));
     // los campos de texto ('num') son opcionales salvo que lleven required: true
     const complete = () => visible().every((f) =>
-      f.type === 'num' ? !f.required || !!vals[f.key] : vals[f.key] != null);
+      f.type === 'num' || f.type === 'text' ? !f.required || !!vals[f.key] : vals[f.key] != null);
     const close = (result) => {
       if (done) return;
       done = true;
@@ -586,7 +587,8 @@ function ask(title, fields, initial = {}) {
         } else {
           const input = document.createElement('input');
           input.type = 'text';
-          input.inputMode = 'numeric';
+          input.inputMode = f.type === 'text' ? 'text' : 'numeric';
+          if (f.maxLength) input.maxLength = f.maxLength;
           input.value = vals[f.key] || '';
           input.oninput = () => {
             vals[f.key] = input.value.trim();

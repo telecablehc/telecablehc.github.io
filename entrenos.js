@@ -382,6 +382,7 @@ const DRAW_TOOLS = [
   ['opp', '●', 'Rival'],
   ['ball', '•', 'Bola'],
   ['cone', '▲', 'Cono'],
+  ['text', 'T', 'Texto'],
   ['run', '→', 'Movimiento'],
   ['pass', '⇢', 'Pase'],
   ['drive', '〰', 'Conducción'],
@@ -394,6 +395,7 @@ const DRAW_HINTS = {
   mover: 'Arrastra un elemento para moverlo (en las flechas, arrastra un extremo para cambiarlo).',
   erase: 'Toca un elemento para borrarlo.',
   setp: 'Toca una flecha para ponerle el paso elegido arriba.',
+  text: 'Toca donde quieras poner la leyenda y escríbela. Toca una leyenda para cambiarla o borrarla.',
 };
 
 let svgSeq = 0;
@@ -492,6 +494,12 @@ function itemMarkup(it, id, idx, opts = {}) {
     case 'gk': return g(`<circle cx="${X}" cy="${Y}" r="0.75" fill="#f2b705" stroke="#fff" stroke-width="0.12"/>${label('P', '#111')}`);
     case 'opp': return g(`<circle cx="${X}" cy="${Y}" r="0.75" fill="#1f4fa8" stroke="#fff" stroke-width="0.12"/>${label(it.n, '#fff')}`);
     case 'ball': return g(`<circle cx="${X}" cy="${Y}" r="0.32" fill="#111" stroke="#fff" stroke-width="0.08"/>`);
+    case 'text': {
+      // leyenda (texto) con contorno blanco para que se lea sobre las líneas de la pista
+      const lines = String(it.txt || '').split('\n');
+      return g(`<text x="${X}" y="${Y}" font-size="1.15" font-weight="800" font-family="Arial, Helvetica, sans-serif" text-anchor="middle" fill="#111" stroke="#fff" stroke-width="0.35" stroke-linejoin="round" paint-order="stroke">${
+        lines.map((l, i) => `<tspan x="${X}" dy="${i ? 1.35 : 0.4}">${escapeHtml(l)}</tspan>`).join('')}</text>`);
+    }
     case 'cone': return g(`<path d="M${X},${Y - 0.6} L${X + 0.5},${Y + 0.4} L${X - 0.5},${Y + 0.4} Z" fill="#ffd400" stroke="#111" stroke-width="0.08"/>`);
     default: {
       const X2 = it.x2 * 40, Y2 = it.y2 * 20;
@@ -517,7 +525,7 @@ function drawingSvg(dibujo, preview = null, opts = {}) {
   const items = [...((dibujo && dibujo.items) || []), ...(preview ? [preview] : [])];
   if (opts.badges == null) opts = { ...opts, badges: maxStep(items) > 1 };
   // orden de dibujo: flechas, luego fichas y la bola encima de todo
-  const layer = (it) => (ARROWS.includes(it.t) ? 0 : it.t === 'ball' ? 2 : 1);
+  const layer = (it) => (ARROWS.includes(it.t) ? 0 : it.t === 'text' ? 3 : it.t === 'ball' ? 2 : 1);
   const order = items.map((it, i) => i).sort((a, b) => layer(items[a]) - layer(items[b]));
   return `<svg viewBox="-1 -1 42 22" xmlns="http://www.w3.org/2000/svg" class="rink-svg">
     <defs><marker id="ah${id}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse">
@@ -847,7 +855,7 @@ function openDrawEditor(dibujo, onDone) {
         for (let k = 1; k < pts.length; k++) {
           if (segDist(p, { x: pts[k - 1][0], y: pts[k - 1][1] }, { x: pts[k][0], y: pts[k][1] }) < 0.6) return { i, part: 'all' };
         }
-      } else if (meters(p, it) < 1) return { i, part: 'all' };
+      } else if (it.t === 'text' ? Math.abs((p.x - it.x) * 40) < Math.max(1.2, String(it.txt || '').length * 0.33) && Math.abs((p.y - it.y) * 20) < 0.9 : meters(p, it) < 1) return { i, part: 'all' };
     }
     return null;
   };
@@ -959,12 +967,26 @@ function openDrawEditor(dibujo, onDone) {
       capture(ev);
       return;
     }
+    if (tool === 'text') { editText(p); return; }
     snapshot();
     const it = { t: tool, x: p.x, y: p.y };
     if (tool === 'own' || tool === 'opp') it.n = nextLabel(tool);
     items.push(it);
     redraw();
   };
+  // Leyendas: tocar en un sitio vacío añade una; tocar una existente la cambia o la borra
+  const editText = async (p) => {
+    const i = items.findIndex((it) => it.t === 'text' && Math.abs((it.x - p.x) * 40) < 3 && Math.abs((it.y - p.y) * 20) < 1);
+    const old = i >= 0 ? items[i] : null;
+    const ans = await ask(old ? 'Cambiar texto' : 'Texto', [{ key: 'txt', type: 'text', label: old ? 'Texto (déjalo vacío para borrarlo)' : 'Texto de la leyenda', placeholder: 'Ej.: Salida por la izquierda', maxLength: 60 }], { txt: old ? old.txt : '' });
+    if (!ans) return;
+    const txt = (ans.txt || '').trim();
+    if (!old && !txt) return;
+    snapshot();
+    if (old) { if (txt) old.txt = txt; else items.splice(i, 1); } else items.push({ t: 'text', x: p.x, y: p.y, txt });
+    redraw();
+  };
+
   svg.onpointermove = (ev) => {
     if (!drag) return;
     const p = toPoint(ev);

@@ -370,7 +370,7 @@ function statFields(tipo) {
     { key: 'part', type: 'seg', label: 'Parte del partido', options: parts },
     { key: 'min', type: 'num', label: 'Minuto de la parte en el marcador (minutos:segundos)', required: true, placeholder: '12:30' },
   ];
-  const nota = { key: 'nota', type: 'num', label: 'Nota (opcional)', placeholder: 'Ej.: salida por la izquierda' };
+  const nota = { key: 'nota', type: 'text', label: 'Nota (opcional)', placeholder: 'Ej.: salida por la izquierda' };
   const rival = (show) => ({ key: 'rival', type: 'num', label: 'Nº de la rival (opcional)', show });
   switch (tipo) {
     case 'golFavor': return [nota, ...when, { key: 'num', type: 'player', label: '¿Quién marca?', all: true }];
@@ -405,7 +405,7 @@ async function addMark(tipo) {
   if (feedsStats(curVideo()) && STAT_MARKS.includes(tipo)) return addStatMark(tipo, t, btn);
   // la nota va primero: al tocar la jugadora se guarda directamente
   const ans = await ask(`${label} · ${fmtVT(t)}`, [
-    { key: 'nota', type: 'num', label: 'Nota (opcional, escríbela antes de elegir la jugadora)', placeholder: 'Ej.: salida por la izquierda' },
+    { key: 'nota', type: 'text', label: 'Nota (opcional, escríbela antes de elegir la jugadora)', placeholder: 'Ej.: salida por la izquierda' },
     { key: 'num', type: 'player', label: 'Jugadora', all: true, optional: true },
   ]);
   if (!ans) return;
@@ -611,9 +611,9 @@ async function finishClip() {
   const v = curVideo();
   const temas = [...new Set(v.clips.map((c) => c.tema).filter(Boolean))];
   const ans = await ask(`Clip ${fmtVT(vaClipStart)} – ${fmtVT(end)}`, [
-    { key: 'nombre', type: 'num', label: 'Nombre del clip', required: true, placeholder: 'Ej.: Salida de presión 2x1' },
+    { key: 'nombre', type: 'text', label: 'Nombre del clip', required: true, placeholder: 'Ej.: Salida de presión 2x1' },
     ...(temas.length ? [{ key: 'temaSel', type: 'seg', label: 'Tema', options: [...temas.map((t) => [t, t]), ['__nuevo', '＋ Otro tema']] }] : []),
-    { key: 'tema', type: 'num', label: temas.length ? 'Nuevo tema (si eliges «Otro tema»)' : 'Tema (opcional)', placeholder: 'Ej.: Bolas paradas',
+    { key: 'tema', type: 'text', label: temas.length ? 'Nuevo tema (si eliges «Otro tema»)' : 'Tema (opcional)', placeholder: 'Ej.: Bolas paradas',
       show: (x) => !temas.length || x.temaSel === '__nuevo' },
   ], temas.length ? { temaSel: temas[temas.length - 1] } : {});
   if (!ans) return;
@@ -676,8 +676,8 @@ function renderClips(v) {
       dl.onclick = () => (canPlay ? downloadClip(c, dl) : notLoaded(v));
       row.querySelector('.va-c-ed').onclick = async () => {
         const ans = await ask('Editar clip', [
-          { key: 'nombre', type: 'num', label: 'Nombre', required: true },
-          { key: 'tema', type: 'num', label: 'Tema' },
+          { key: 'nombre', type: 'text', label: 'Nombre', required: true },
+          { key: 'tema', type: 'text', label: 'Tema' },
           { key: 'inicio', type: 'num', label: 'Inicio (mm:ss)', required: true },
           { key: 'fin', type: 'num', label: 'Fin (mm:ss)', required: true },
         ], { nombre: c.nombre, tema: c.tema || '', inicio: fmtVT(c.inicio), fin: fmtVT(c.fin) });
@@ -719,6 +719,12 @@ function overlayMarkup(items, ar) {
     items.map((it) => {
       const st = `stroke="${it.c}" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"`;
       const shadow = `stroke="rgba(0,0,0,.55)" stroke-width="11" fill="none" stroke-linecap="round" stroke-linejoin="round"`;
+      if (it.t === 'text') {
+        // leyenda: texto del color elegido con un contorno oscuro para que se lea sobre el vídeo
+        const lines = String(it.txt || '').split('\n');
+        return `<text x="${(it.x1 * 1000).toFixed(1)}" y="${(it.y1 * H).toFixed(1)}" font-size="38" font-weight="800" font-family="Arial, Helvetica, sans-serif" text-anchor="middle" fill="${it.c}" stroke="rgba(0,0,0,.8)" stroke-width="9" stroke-linejoin="round" paint-order="stroke">${
+          lines.map((l, i) => `<tspan x="${(it.x1 * 1000).toFixed(1)}" dy="${i ? 44 : 0}">${escapeHtml(l)}</tspan>`).join('')}</text>`;
+      }
       let d;
       if (it.t === 'pen') d = 'M' + it.pts.map(([x, y]) => P(x, y)).join(' L');
       else if (it.t === 'circle') {
@@ -758,6 +764,7 @@ function startDrawing() {
     try { svg.setPointerCapture(ev.pointerId); } catch {}
     const [x, y] = pt(ev);
     const d = vaDrawing;
+    if (d.tool === 'text') { addVideoText(x, y); return; }
     d.cur = d.tool === 'pen' ? { t: 'pen', c: d.color, pts: [[x, y]] } : { t: d.tool, c: d.color, x1: x, y1: y, x2: x, y2: y };
     redrawOverlayEdit();
   };
@@ -779,6 +786,21 @@ function startDrawing() {
   };
 }
 
+// Leyenda: se toca donde va y se escribe (con la herramienta Texto, tocar una leyenda la cambia o la borra)
+async function addVideoText(x, y) {
+  const d = vaDrawing;
+  const i = d.items.findIndex((it) => it.t === 'text' && Math.abs(it.x1 - x) < 0.08 && Math.abs(it.y1 - y) < 0.05);
+  const old = i >= 0 ? d.items[i] : null;
+  const ans = await ask(old ? 'Cambiar texto' : 'Texto', [{ key: 'txt', type: 'text', label: old ? 'Texto (déjalo vacío para borrarlo)' : 'Texto de la leyenda', placeholder: 'Ej.: Bloqueo y continuación', maxLength: 60 }], { txt: old ? old.txt : '' });
+  if (!ans || !vaDrawing) return;
+  const txt = (ans.txt || '').trim();
+  d.undo.push(JSON.stringify(d.items));
+  if (old) { if (txt) old.txt = txt; else d.items.splice(i, 1); }
+  else if (txt) d.items.push({ t: 'text', c: d.color, x1: x, y1: y, txt });
+  else d.undo.pop();
+  redrawOverlayEdit();
+}
+
 function redrawOverlayEdit() {
   const d = vaDrawing, video = vid();
   $('vaOverlay').innerHTML = overlayMarkup([...d.items, ...(d.cur ? [d.cur] : [])], video.videoWidth / video.videoHeight || 16 / 9);
@@ -787,7 +809,7 @@ function redrawOverlayEdit() {
 function drawToolbar() {
   const d = vaDrawing, bar = $('vaDrawBar');
   bar.hidden = false;
-  const tools = [['arrow', '➜', 'Flecha'], ['line', '／', 'Línea'], ['circle', '◯', 'Círculo'], ['pen', '✎', 'Lápiz']];
+  const tools = [['arrow', '➜', 'Flecha'], ['line', '／', 'Línea'], ['circle', '◯', 'Círculo'], ['pen', '✎', 'Lápiz'], ['text', 'T', 'Texto']];
   bar.replaceChildren(
     Object.assign(document.createElement('span'), { className: 'va-draw-t', textContent: `Dibujo en ${fmtVT(d.t)}` }),
     ...tools.map(([k, icon, label]) => {
@@ -947,6 +969,8 @@ async function recordClip(clip, onProgress = () => {}, isCancelled = () => false
     if (overlay) ctx.drawImage(overlay, 0, 0, W, H);
   };
   const frame = () => new Promise((r) => requestAnimationFrame(r));
+  // play() a veces no responde (vídeo por enlace): no se espera más de 1,5 s
+  const play = () => Promise.race([video.play().catch(() => {}), new Promise((r) => setTimeout(r, 1500))]);
 
   await seekTo(clip.inicio);
   paint();
@@ -960,7 +984,7 @@ async function recordClip(clip, onProgress = () => {}, isCancelled = () => false
   rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
   const finished = new Promise((r) => (rec.onstop = r));
   rec.start(250);
-  await video.play();
+  await play();
   let next = 0, cancelled = false;
   // se graba en tiempo real; en cada dibujo, el vídeo se para DRAW_HOLD segundos
   for (;;) {
@@ -977,7 +1001,7 @@ async function recordClip(clip, onProgress = () => {}, isCancelled = () => false
       }
       overlay = null;
       next++;
-      await video.play();
+      await play();
     }
     paint();
     onProgress((video.currentTime - clip.inicio) / (clip.fin - clip.inicio), false);

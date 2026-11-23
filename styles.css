@@ -580,6 +580,7 @@ dialog.edit-rec { width: min(760px, calc(100vw - 16px)); }
 .small-pick { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); margin-bottom: 10px; }
 .small-pick .pick-btn b { font-size: 18px; }
 #recEvents .ev { gap: 6px; }
+.va-playbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .va-stat { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; margin: 0 0 10px; font-size: 14px; }
 .va-stat label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .va-stat input { width: 20px; height: 20px; }

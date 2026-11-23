@@ -503,7 +503,7 @@ function renderMarks(v) {
   playAll.className = 'ghost add-past';
   playAll.textContent = `▶ Ver seguidas (${list.length})`;
   playAll.hidden = !playsInApp(v) || !loadedFiles[v.id] || !list.length;
-  playAll.onclick = () => playSegments(list.map((m) => [Math.max(0, m.t - PRE_ROLL), m.t + (m.dibujo ? 0.1 : POST_ROLL)]));
+  playAll.onclick = () => playSegments(list.map((m) => [Math.max(0, m.t - PRE_ROLL), m.t + (m.dibujo ? 0.1 : POST_ROLL)]), false, `${list.length} acciones seguidas`);
   box.replaceChildren(playAll, ...list.map((m) => {
     const [, label, color] = markInfo(v, m);
     const row = document.createElement('div');
@@ -540,7 +540,7 @@ function jumpTo(t, mark = null) {
     return;
   }
   if (!loadedFiles[v.id]) { notLoaded(v); return; }
-  vaPlaylist = null;
+  stopPlaylist();
   vid().currentTime = t;
   if (mark && mark.dibujo) { vid().pause(); showOverlay(mark.dibujo); }
   else vid().play();
@@ -548,12 +548,43 @@ function jumpTo(t, mark = null) {
 }
 
 // Reproduce varios tramos seguidos [[inicio, fin], …]
-function playSegments(segs, loop = false) {
+function playSegments(segs, loop = false, label = '') {
   if (!segs.length) return;
-  vaPlaylist = { segs, i: 0, loop };
+  vaPlaylist = { segs, i: 0, loop, label };
   vid().currentTime = segs[0][0];
   vid().play();
+  renderPlayBar();
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Termina la reproducción de un clip / de las acciones seguidas y vuelve al partido normal
+function stopPlaylist() {
+  if (!vaPlaylist) return;
+  vaPlaylist = null;
+  renderPlayBar();
+}
+
+// Barra "Viendo el clip … [Volver al partido]" mientras se reproduce una lista de tramos
+function renderPlayBar() {
+  const bar = $('vaPlayBar');
+  if (!bar) return;
+  bar.hidden = !vaPlaylist;
+  if (!vaPlaylist) { bar.replaceChildren(); return; }
+  const txt = document.createElement('span');
+  txt.textContent = `▶ Viendo ${vaPlaylist.label || 'un tramo'}`;
+  const exit = Object.assign(document.createElement('button'), { className: 'primary small-btn', textContent: '✕ Volver al partido' });
+  exit.onclick = () => { stopPlaylist(); toast('Ya puedes ver el partido entero'); };
+  bar.replaceChildren(txt, exit);
+}
+
+// Si se va (con la barra, ±5 s…) a un momento fuera del tramo que se está viendo, se deja la lista
+function userSeek(t) {
+  const video = vid();
+  if (vaPlaylist) {
+    const [a, b] = vaPlaylist.segs[vaPlaylist.i];
+    if (t < a - 0.5 || t > b) stopPlaylist();
+  }
+  video.currentTime = t;
 }
 
 // ---------- 2) Clips ----------
@@ -637,7 +668,7 @@ function renderClips(v) {
       row.querySelector('b').textContent = c.nombre;
       row.querySelector('small').textContent = `${fmtVT(c.inicio)} – ${fmtVT(c.fin)} · ${Math.round(c.fin - c.inicio)} s${nDraw ? ` · ✏️ ${nDraw} dibujo${nDraw > 1 ? 's' : ''}` : ''}`;
       const play = row.querySelector('.va-c-play');
-      if (canPlay) play.onclick = () => playSegments([[c.inicio, c.fin]], true);
+      if (canPlay) play.onclick = () => playSegments([[c.inicio, c.fin]], true, `clip «${c.nombre}» (se repite)`);
       else if (playsInApp(v)) play.onclick = () => notLoaded(v);
       else { play.textContent = '📺 Ver en OK Liga TV'; play.onclick = () => alert(`Ve a ${fmtVT(c.inicio)} en OK Liga TV (hasta ${fmtVT(c.fin)}).`); }
       const dl = row.querySelector('.va-c-dl');
@@ -711,7 +742,7 @@ function startDrawing() {
   const v = curVideo();
   if (!loadedFiles[v.id]) { notLoaded(v); return; }
   vid().pause();
-  vaPlaylist = null;
+  stopPlaylist();
   vaDrawing = { t: vid().currentTime, items: [], tool: 'arrow', color: DRAW_COLORS[0], undo: [], cur: null };
   drawToolbar();
   const svg = $('vaOverlay');
@@ -824,7 +855,7 @@ function onTimeUpdate() {
     if (t >= end) {
       vaPlaylist.i++;
       if (vaPlaylist.i >= vaPlaylist.segs.length) {
-        if (vaPlaylist.loop) vaPlaylist.i = 0; else { vaPlaylist = null; video.pause(); }
+        if (vaPlaylist.loop) vaPlaylist.i = 0; else { stopPlaylist(); video.pause(); }
       }
       if (vaPlaylist) video.currentTime = vaPlaylist.segs[vaPlaylist.i][0];
     }
@@ -851,7 +882,7 @@ function onTimeUpdate() {
 
 function pauseAnalysisVideo() {
   try { vid().pause(); } catch {}
-  vaPlaylist = null;
+  stopPlaylist();
   if (vaDrawing) endDrawing(false);
 }
 
@@ -1234,10 +1265,10 @@ function initVideo() {
   window.addEventListener('resize', layoutOverlay);
   video.onclick = () => { if (!vaDrawing) (video.paused ? video.play() : video.pause()); };
   $('vaPlay').onclick = () => (video.paused ? video.play() : video.pause());
-  $('vaBack5').onclick = () => { video.currentTime = Math.max(0, video.currentTime - 5); };
-  $('vaFwd5').onclick = () => { video.currentTime = Math.min(video.duration || 0, video.currentTime + 5); };
+  $('vaBack5').onclick = () => userSeek(Math.max(0, video.currentTime - 5));
+  $('vaFwd5').onclick = () => userSeek(Math.min(video.duration || 0, video.currentTime + 5));
   $('vaSpeed').onchange = () => { video.playbackRate = +$('vaSpeed').value; };
-  $('vaSeek').oninput = () => { if (video.duration) video.currentTime = ($('vaSeek').value / 1000) * video.duration; };
+  $('vaSeek').oninput = () => { if (video.duration) userSeek(($('vaSeek').value / 1000) * video.duration); };
   $('vaDraw').onclick = startDrawing;
   $('vaClip').onclick = startClip;
   $('vaTabMarks').onclick = () => { vaTab = 'marks'; renderAnalysis(); };

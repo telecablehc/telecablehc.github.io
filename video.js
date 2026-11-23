@@ -1323,6 +1323,7 @@ function openClipWindow(c) {
     video.src = loaded.url;
   }
   video.playbackRate = +$('clipSpeed').value || 1;
+  applyVolume();
   const start = () => { if (!clipWin) return; video.currentTime = c.inicio; video.play().catch(() => {}); };
   if (video.readyState >= 1) start(); else video.addEventListener('loadedmetadata', start, { once: true });
   $('dlgClip').showModal();
@@ -1519,8 +1520,44 @@ function initClipWindow() {
   window.addEventListener('resize', () => { if (clipWin && $('clipOverlay').classList.contains('visible')) layoutOverlay(video, $('clipOverlay')); });
 }
 
+// ---------- Volumen (el mismo para el partido y los clips; se recuerda en este dispositivo) ----------
+const KEY_VOLUME = 'hoquei.volumen';
+let volume = (() => { try { return { v: 1, muted: false, ...JSON.parse(localStorage.getItem(KEY_VOLUME) || '{}') }; } catch { return { v: 1, muted: false }; } })();
+// En iPhone / iPad el volumen solo se cambia con los botones del aparato: allí solo hay silenciar
+const canSetVolume = (() => { try { const a = document.createElement('audio'); a.volume = 0.5; return a.volume === 0.5; } catch { return false; } })();
+
+function applyVolume() {
+  ['vaVideo', 'clipVideo'].forEach((id) => {
+    const v = $(id);
+    if (!v) return;
+    v.muted = volume.muted || volume.v === 0;
+    if (canSetVolume) v.volume = volume.v;
+  });
+  ['va', 'clip'].forEach((p) => {
+    const silent = volume.muted || volume.v === 0;
+    $(p + 'Mute').textContent = silent ? '🔇' : volume.v < 0.5 ? '🔉' : '🔊';
+    $(p + 'Mute').title = silent ? 'Activar el sonido' : 'Silenciar';
+    $(p + 'Vol').value = Math.round((volume.muted ? 0 : volume.v) * 100);
+    $(p + 'Vol').hidden = !canSetVolume;
+  });
+  try { localStorage.setItem(KEY_VOLUME, JSON.stringify(volume)); } catch {}
+}
+
+function initVolume() {
+  ['va', 'clip'].forEach((p) => {
+    $(p + 'Mute').onclick = () => {
+      if (volume.muted || volume.v === 0) { volume.muted = false; if (volume.v === 0) volume.v = 0.6; }
+      else volume.muted = true;
+      applyVolume();
+    };
+    $(p + 'Vol').oninput = () => { volume.v = $(p + 'Vol').value / 100; volume.muted = volume.v === 0; applyVolume(); };
+  });
+  applyVolume();
+}
+
 function initVideo() {
   initClipWindow();
+  initVolume();
   $('vNew').onclick = () => openVideoDialog();
   $('vaKbChange').onclick = openKeyboardPicker;
   $('vaStats').onchange = toggleStats;

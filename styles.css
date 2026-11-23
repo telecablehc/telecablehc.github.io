@@ -599,6 +599,9 @@ dialog.clip-dialog { width: min(1100px, calc(100vw - 12px)); max-height: 96vh; p
 .clip-cap-go { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: baseline; text-align: left; background: none; border: 0; padding: 6px 2px; color: var(--text); }
 .clip-cap-go b { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; color: var(--muted); }
 .clip-cap-go span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.va-volbox { display: inline-flex; align-items: center; gap: 4px; }
+.va-mute { padding: 6px 9px; font-size: 18px; line-height: 1; }
+.va-controls input.va-vol { flex: 0 0 90px; order: 0; width: 90px; accent-color: var(--brand); }
 .va-playbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .va-stat { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; margin: 0 0 10px; font-size: 14px; }
 .va-stat label { display: flex; align-items: center; gap: 8px; font-weight: 600; }

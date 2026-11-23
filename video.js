@@ -668,7 +668,7 @@ function renderClips(v) {
       row.querySelector('b').textContent = c.nombre;
       row.querySelector('small').textContent = `${fmtVT(c.inicio)} – ${fmtVT(c.fin)} · ${Math.round(c.fin - c.inicio)} s${nDraw ? ` · ✏️ ${nDraw} dibujo${nDraw > 1 ? 's' : ''}` : ''}`;
       const play = row.querySelector('.va-c-play');
-      if (canPlay) play.onclick = () => playSegments([[c.inicio, c.fin]], true, `clip «${c.nombre}» (se repite)`);
+      if (canPlay) play.onclick = () => openClipWindow(c);
       else if (playsInApp(v)) play.onclick = () => notLoaded(v);
       else { play.textContent = '📺 Ver en OK Liga TV'; play.onclick = () => alert(`Ve a ${fmtVT(c.inicio)} en OK Liga TV (hasta ${fmtVT(c.fin)}).`); }
       const dl = row.querySelector('.va-c-dl');
@@ -699,8 +699,7 @@ function renderClips(v) {
 // Elementos: {t: 'arrow'|'line'|'circle'|'pen', c: color, x1,y1,x2,y2 | pts:[[x,y]…]} en coordenadas 0–1 del fotograma.
 
 // Ajusta la capa de dibujo al rectángulo real de la imagen (el vídeo puede tener bandas negras)
-function layoutOverlay() {
-  const video = vid(), svg = $('vaOverlay');
+function layoutOverlay(video = vid(), svg = $('vaOverlay')) {
   if (!video.videoWidth) return;
   const W = video.clientWidth, H = video.clientHeight;
   const ar = video.videoWidth / video.videoHeight;
@@ -1250,7 +1249,131 @@ function openKeyboardEditor(kbIn, fromId = null, isNew = false) {
 
 // ---------- Conexión con la interfaz (se llama al final de app.js) ----------
 
+// ---------- Ver un clip en su propia ventana ----------
+// El clip se ve en otro reproductor encima de la app; el partido se queda parado donde estaba.
+let clipWin = null; // { clip, hls, hold, last, draws }
+
+function openClipWindow(c) {
+  const v = curVideo(), loaded = v && loadedFiles[v.id];
+  if (!loaded) { notLoaded(v); return; }
+  pauseAnalysisVideo();
+  closeClipSource();
+  const video = $('clipVideo');
+  clipWin = { clip: c, hls: null, hold: null, last: c.inicio, draws: v.marcas.filter((m) => m.dibujo && m.t >= c.inicio && m.t <= c.fin) };
+  $('clipTitle').textContent = c.nombre;
+  const nDraw = clipWin.draws.length;
+  $('clipSub').textContent = `${c.tema || 'Sin tema'} · ${fmtVT(c.inicio)} – ${fmtVT(c.fin)}${nDraw ? ` · ✏️ ${nDraw} dibujo${nDraw > 1 ? 's' : ''}` : ''}`;
+  showClipOverlay(null);
+  if (loaded.stream) {
+    video.crossOrigin = 'anonymous';
+    if (window.Hls && Hls.isSupported()) {
+      clipWin.hls = new Hls({ maxBufferLength: 20, startPosition: c.inicio });
+      clipWin.hls.loadSource(loaded.url);
+      clipWin.hls.attachMedia(video);
+    } else video.src = loaded.url;
+  } else {
+    video.removeAttribute('crossorigin');
+    video.src = loaded.url;
+  }
+  video.playbackRate = +$('clipSpeed').value || 1;
+  const start = () => { if (!clipWin) return; video.currentTime = c.inicio; video.play().catch(() => {}); };
+  if (video.readyState >= 1) start(); else video.addEventListener('loadedmetadata', start, { once: true });
+  $('dlgClip').showModal();
+  clipTick();
+}
+
+function closeClipSource() {
+  const video = $('clipVideo');
+  if (clipWin) { clearTimeout(clipWin.hold); if (clipWin.hls) clipWin.hls.destroy(); }
+  clipWin = null;
+  video.pause();
+  video.removeAttribute('src');
+  try { video.load(); } catch {}
+}
+
+function closeClipWindow() {
+  closeClipSource();
+  if ($('dlgClip').open) $('dlgClip').close();
+}
+
+function showClipOverlay(dibujo) {
+  const video = $('clipVideo'), svg = $('clipOverlay');
+  layoutOverlay(video, svg);
+  svg.innerHTML = dibujo ? overlayMarkup(dibujo.items, video.videoWidth / video.videoHeight || 16 / 9) : '';
+  svg.classList.toggle('visible', !!dibujo);
+}
+
+function clipTick() {
+  if (!clipWin) return;
+  const video = $('clipVideo'), c = clipWin.clip;
+  const len = c.fin - c.inicio, pos = Math.min(len, Math.max(0, video.currentTime - c.inicio));
+  $('clipTime').textContent = `${fmtVT(pos)} / ${fmtVT(len)}`;
+  $('clipPlay').textContent = video.paused && !clipWin.hold ? '▶' : '❚❚';
+  if (document.activeElement !== $('clipSeek')) $('clipSeek').value = Math.round((pos / (len || 1)) * 1000);
+}
+
+function onClipTime() {
+  if (!clipWin) return;
+  const video = $('clipVideo'), c = clipWin.clip, t = video.currentTime;
+  if (t >= c.fin) {
+    if ($('clipLoop').checked) { video.currentTime = c.inicio; clipWin.last = c.inicio; }
+    else { video.pause(); }
+  } else if (t < c.inicio - 1 && video.readyState >= 1) {
+    video.currentTime = c.inicio;
+  }
+  // se para unos segundos en cada dibujo del clip
+  if (!video.paused && !clipWin.hold) {
+    const m = clipWin.draws.find((x) => x.t > clipWin.last && x.t <= t && t - x.t < 1);
+    if (m) {
+      video.pause();
+      video.currentTime = m.t;
+      showClipOverlay(m.dibujo);
+      clipWin.hold = setTimeout(() => {
+        if (!clipWin) return;
+        clipWin.hold = null;
+        showClipOverlay(null);
+        video.play().catch(() => {});
+      }, DRAW_HOLD * 1000);
+    }
+  }
+  if (!clipWin.hold && !video.paused) showClipOverlay(null);
+  clipWin.last = t;
+  clipTick();
+}
+
+function initClipWindow() {
+  const video = $('clipVideo');
+  video.addEventListener('timeupdate', onClipTime);
+  ['play', 'pause', 'seeked'].forEach((e) => video.addEventListener(e, clipTick));
+  $('clipPlay').onclick = () => {
+    if (!clipWin) return;
+    if (clipWin.hold) { clearTimeout(clipWin.hold); clipWin.hold = null; showClipOverlay(null); video.play(); return; }
+    if (video.paused) {
+      if (video.currentTime >= clipWin.clip.fin - 0.05) video.currentTime = clipWin.clip.inicio;
+      video.play();
+    } else video.pause();
+  };
+  $('clipRestart').onclick = () => {
+    if (!clipWin) return;
+    clearTimeout(clipWin.hold); clipWin.hold = null; showClipOverlay(null);
+    video.currentTime = clipWin.clip.inicio; clipWin.last = clipWin.clip.inicio; video.play();
+  };
+  $('clipSeek').oninput = () => {
+    if (!clipWin) return;
+    const c = clipWin.clip;
+    clearTimeout(clipWin.hold); clipWin.hold = null; showClipOverlay(null);
+    video.currentTime = c.inicio + ($('clipSeek').value / 1000) * (c.fin - c.inicio);
+    clipWin.last = video.currentTime;
+  };
+  $('clipSpeed').onchange = () => { video.playbackRate = +$('clipSpeed').value; };
+  $('clipDl').onclick = () => { if (!clipWin) return; const c = clipWin.clip; closeClipWindow(); downloadClip(c, $('clipDl')); };
+  $('clipClose').onclick = closeClipWindow;
+  $('dlgClip').addEventListener('close', closeClipSource);
+  window.addEventListener('resize', () => { if (clipWin && $('clipOverlay').classList.contains('visible')) layoutOverlay(video, $('clipOverlay')); });
+}
+
 function initVideo() {
+  initClipWindow();
   $('vNew').onclick = () => openVideoDialog();
   $('vaKbChange').onclick = openKeyboardPicker;
   $('vaStats').onchange = toggleStats;

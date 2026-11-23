@@ -190,6 +190,31 @@
       <div id="vaList"></div>
     </section>
 
+    <!-- Ver un clip en su propia ventana (el partido se queda donde estaba) -->
+    <dialog id="dlgClip" class="clip-dialog">
+      <div class="clip-head">
+        <div class="clip-title"><b id="clipTitle"></b><small id="clipSub"></small></div>
+        <button type="button" id="clipClose" class="ghost">✕ Cerrar</button>
+      </div>
+      <div class="va-stage clip-stage">
+        <video id="clipVideo" playsinline preload="auto"></video>
+        <svg id="clipOverlay" class="va-overlay" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <input id="clipSeek" type="range" min="0" max="1000" value="0">
+      <div class="va-controls clip-controls">
+        <button type="button" id="clipRestart" class="ghost">⏮</button>
+        <button type="button" id="clipPlay" class="primary va-play">▶</button>
+        <span id="clipTime" class="va-time">00:00 / 00:00</span>
+        <select id="clipSpeed" class="ghost">
+          <option value="0.25">0,25×</option><option value="0.5">0,5×</option>
+          <option value="1" selected>1×</option><option value="1.5">1,5×</option><option value="2">2×</option>
+        </select>
+        <label class="check"><input type="checkbox" id="clipLoop" checked> Repetir</label>
+        <span class="spacer"></span>
+        <button type="button" id="clipDl" class="ghost">⬇ Descargar</button>
+      </div>
+    </dialog>
+
     <!-- Elegir teclado -->
     <dialog id="dlgKbPick">
       <h3>Elegir teclado</h3>

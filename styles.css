@@ -580,6 +580,14 @@ dialog.edit-rec { width: min(760px, calc(100vw - 16px)); }
 .small-pick { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); margin-bottom: 10px; }
 .small-pick .pick-btn b { font-size: 18px; }
 #recEvents .ev { gap: 6px; }
+dialog.clip-dialog { width: min(1100px, calc(100vw - 12px)); max-height: 96vh; padding: 10px 12px; }
+.clip-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.clip-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.clip-title b { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clip-title small { color: var(--muted); font-size: 13px; }
+.clip-stage video { max-height: 70vh; }
+#clipSeek { width: 100%; margin: 8px 0 4px; }
+.clip-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .va-playbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .va-stat { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; margin: 0 0 10px; font-size: 14px; }
 .va-stat label { display: flex; align-items: center; gap: 8px; font-weight: 600; }

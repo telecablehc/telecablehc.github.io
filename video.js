@@ -30,6 +30,10 @@ const markType = (k) => MARK_TYPES.find((m) => m[0] === k) || ['otro', 'Otro', '
 const KEY_KEYBOARDS = 'hoquei.teclados';
 // tecla: atajo en el teclado del ordenador (una letra o un número). En el estándar, 1–9 y 0.
 const STD_KEYBOARD = { nombre: 'Estándar', botones: MARK_TYPES.map(([k, label, color], i) => ({ k, label, color, tecla: String((i + 1) % 10) })) };
+// jug: cuántas jugadoras se pueden elegir al marcar (0 = ninguna; 1 por defecto; hasta 5)
+const JUG_MAX = 5;
+const jugOf = (b) => (b && Number.isInteger(b.jug) ? Math.min(JUG_MAX, Math.max(0, b.jug)) : 1);
+const marksPlayers = (m) => (m.nums && m.nums.length ? m.nums : m.num ? [m.num] : []);
 const normKey = (t) => (/^[a-z0-9ñ]$/i.test(t || '') ? t.toUpperCase() : '');
 const KB_COLORS = ['#1f9d55', '#d64545', '#2f6fdb', '#7b3fe4', '#e07b00', '#14a3a3', '#8a6d3b', '#b8860b', '#5f7d8c', '#e83e8c', '#20c997', '#888888'];
 const loadKeyboards = () => load(KEY_KEYBOARDS, []);
@@ -412,14 +416,25 @@ async function addMark(tipo) {
   const btn = keyboardOf(curVideo()).botones.find((b) => b.k === tipo) || { label: markType(tipo)[1], color: markType(tipo)[2] };
   const label = btn.label;
   if (feedsStats(curVideo()) && STAT_MARKS.includes(tipo)) return addStatMark(tipo, t, btn);
-  // la nota va primero: al tocar la jugadora se guarda directamente
-  const ans = await ask(`${label} · ${fmtVT(t)}`, [
-    { key: 'nota', type: 'text', label: 'Nota (opcional, escríbela antes de elegir la jugadora)', placeholder: 'Ej.: salida por la izquierda' },
-    { key: 'num', type: 'player', label: 'Jugadora', all: true, optional: true },
-  ]);
+  const jug = jugOf(btn);
+  let ans;
+  if (jug === 0) ans = { nota: '' }; // botón sin jugadoras: se marca al momento
+  else if (jug === 1) {
+    // la nota va primero: al tocar la jugadora se guarda directamente
+    ans = await ask(`${label} · ${fmtVT(t)}`, [
+      { key: 'nota', type: 'text', label: 'Nota (opcional, escríbela antes de elegir la jugadora)', placeholder: 'Ej.: salida por la izquierda' },
+      { key: 'num', type: 'player', label: 'Jugadora', all: true, optional: true },
+    ]);
+  } else {
+    ans = await ask(`${label} · ${fmtVT(t)}`, [
+      { key: 'nota', type: 'text', label: 'Nota (opcional)', placeholder: 'Ej.: salida por la izquierda' },
+      { key: 'nums', type: 'players', label: `Jugadoras (hasta ${jug})`, max: jug },
+    ]);
+  }
   if (!ans) return;
+  const nums = jug > 1 ? (ans.nums || []).slice(0, jug) : ans.num ? [ans.num] : [];
   updateVideo((x) => {
-    x.marcas.push({ id: uid(), t, tipo, label, color: btn.color, num: ans.num || null, nota: ans.nota || '' });
+    x.marcas.push({ id: uid(), t, tipo, label, color: btn.color, num: nums[0] || null, ...(nums.length > 1 ? { nums } : {}), nota: ans.nota || '' });
     x.marcas.sort((a, b) => a.t - b.t);
   });
   toast(`${label} marcado en ${fmtVT(t)}`);
@@ -464,7 +479,7 @@ function syncVideoStats(orig, X) {
 function filteredMarks(v) {
   return v.marcas.filter((m) =>
     (vaFilter.tipo === 'todos' || (vaFilter.tipo === 'dibujos' ? !!m.dibujo : m.tipo === vaFilter.tipo && !m.dibujo)) &&
-    (vaFilter.num === 'todas' || m.num === vaFilter.num));
+    (vaFilter.num === 'todas' || marksPlayers(m).includes(vaFilter.num)));
 }
 
 function chip(label, active, onclick, color) {
@@ -487,7 +502,7 @@ function renderMarks(v) {
     kinds.set(k, e);
   });
   const rank = (k) => (k === 'dibujos' ? 9999 : order.includes(k) ? order.indexOf(k) : 999);
-  const players = [...new Set(v.marcas.map((m) => m.num).filter(Boolean))];
+  const players = [...new Set(v.marcas.flatMap(marksPlayers))];
   $('vaFilters').replaceChildren(
     chip(`Todas (${v.marcas.length})`, vaFilter.tipo === 'todos', () => { vaFilter.tipo = 'todos'; renderAnalysis(); }),
     ...[...kinds.entries()].sort((a, b) => rank(a[0]) - rank(b[0])).map(([k, e]) =>
@@ -521,7 +536,7 @@ function renderMarks(v) {
     row.innerHTML = '<button class="va-mark-go"><b class="va-t"></b><span class="va-type"></span><span class="va-who"></span><small class="va-note"></small></button><button class="ghost small danger">Borrar</button>';
     row.querySelector('.va-t').textContent = fmtVT(m.t);
     row.querySelector('.va-type').textContent = label;
-    row.querySelector('.va-who').textContent = m.num ? playerName(m.num) : '';
+    row.querySelector('.va-who').textContent = marksPlayers(m).map(playerName).join(', ');
     row.querySelector('.va-note').textContent = m.nota || '';
     if (m.stat) {
       const s = document.createElement('small');
@@ -1256,7 +1271,14 @@ function openKeyboardEditor(kbIn, fromId = null, isNew = false) {
       const up = btn('↑', 'Subir', () => { [kb.botones[i - 1], kb.botones[i]] = [kb.botones[i], kb.botones[i - 1]]; draw(); });
       const down = btn('↓', 'Bajar', () => { [kb.botones[i + 1], kb.botones[i]] = [kb.botones[i], kb.botones[i + 1]]; draw(); });
       up.disabled = i === 0; down.disabled = i === kb.botones.length - 1;
-      r.append(color, input, key, up, down, btn('✕', 'Quitar', () => { kb.botones.splice(i, 1); draw(); }, 'danger'));
+      // cuántas jugadoras se eligen al marcar
+      const jug = document.createElement('select');
+      jug.className = 'kb-jug';
+      jug.title = 'Cuántas jugadoras se pueden elegir al marcar esta acción';
+      jug.append(...[[0, 'Sin jugadora'], [1, '1 jugadora'], ...[2, 3, 4, 5].map((n) => [n, `Hasta ${n}`])].map(([n, t]) => new Option(t, n)));
+      jug.value = String(jugOf(b));
+      jug.onchange = () => { const n = +jug.value; if (n === 1) delete b.jug; else b.jug = n; };
+      r.append(color, input, key, jug, up, down, btn('✕', 'Quitar', () => { kb.botones.splice(i, 1); draw(); }, 'danger'));
       return r;
     }));
     drawPreview();

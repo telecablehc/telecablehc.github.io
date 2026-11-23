@@ -619,7 +619,12 @@ dialog.clip-dialog { width: min(1100px, calc(100vw - 12px)); max-height: 96vh; p
 .kb-pick small { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .kb-dots { display: flex; gap: 3px; }
 .kb-dots i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
-.kb-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.kb-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+.kb-row select.kb-jug { flex: 0 0 auto; padding: 9px 6px; font-size: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); }
+@media (max-width: 560px) {
+  .kb-row input:not(.kb-key) { flex-basis: calc(100% - 50px); }
+  .kb-row { padding-bottom: 8px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+}
 .kb-row input { flex: 1; min-width: 0; padding: 9px 10px; font-size: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); }
 .kb-row button:disabled { opacity: .3; }
 #kbPreview .va-tag { pointer-events: none; min-height: 40px; }

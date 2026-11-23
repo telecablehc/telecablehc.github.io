@@ -522,7 +522,8 @@ function ask(title, fields, initial = {}) {
     const visible = () => fields.filter((f) => !f.show || f.show(vals));
     // los campos de texto ('num') son opcionales salvo que lleven required: true
     const complete = () => visible().every((f) =>
-      f.type === 'num' || f.type === 'text' ? !f.required || !!vals[f.key] : vals[f.key] != null);
+      f.type === 'num' || f.type === 'text' ? !f.required || !!vals[f.key]
+        : f.type === 'players' ? true : vals[f.key] != null);
     const close = (result) => {
       if (done) return;
       done = true;
@@ -553,6 +554,24 @@ function ask(title, fields, initial = {}) {
             seg.append(b);
           });
           wrap.append(seg);
+        } else if (f.type === 'players') {
+          // varias jugadoras (hasta f.max); se guarda con el botón Guardar
+          const sel = (vals[f.key] = vals[f.key] || []);
+          label.textContent = `${f.label} (${sel.length}/${f.max})`;
+          const grid = document.createElement('div');
+          grid.className = 'pick';
+          rosterOrder(PLAYERS.map((p) => ({ ...p }))).forEach((p) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            const on = sel.includes(p.num);
+            b.className = 'pick-btn' + (on ? ' active' : '');
+            b.disabled = !on && sel.length >= f.max;
+            b.innerHTML = `<b>${p.num}</b><span></span>`;
+            b.querySelector('span').textContent = p.name;
+            b.onclick = () => { if (on) sel.splice(sel.indexOf(p.num), 1); else sel.push(p.num); draw(); };
+            grid.append(b);
+          });
+          wrap.append(grid);
         } else if (f.type === 'player') {
           const grid = document.createElement('div');
           grid.className = 'pick';

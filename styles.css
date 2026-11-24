@@ -633,3 +633,21 @@ dialog.clip-dialog { width: min(1100px, calc(100vw - 12px)); max-height: 96vh; p
 /* Cuentas con acceso solo a Partidos */
 .solo-partidos .home-btn[data-go="entrenos"],
 .solo-partidos .home-btn[data-go="video"] { display: none; }
+
+/* Modo espectador (En directo) */
+.live-card { border-left: 5px solid var(--warn); }
+.live-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--warn); vertical-align: middle; animation: live-blink 1.4s infinite; }
+@keyframes live-blink { 50% { opacity: .25; } }
+#screen-directo { padding: 12px 16px 40px; }
+.live-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+.live-badge { font-weight: 800; font-size: 14px; padding: 4px 10px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); }
+.live-badge.on { color: var(--warn); border-color: var(--warn); }
+.live-badge.paused { color: var(--amber); border-color: var(--amber); }
+.live-badge.done { color: var(--muted); }
+.live-who { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.live-clock { grid-template-columns: 1fr auto; margin-bottom: 12px; }
+.live-pill { display: inline-block; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); margin-left: 4px; }
+.live-pill.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+.live-grid .card { cursor: default; }
+.live-events { display: grid; gap: 6px; margin-bottom: 8px; }
+.live-summary { background: var(--panel); border-radius: var(--radius); padding: 12px; overflow-x: auto; }

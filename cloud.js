@@ -139,8 +139,9 @@ async function pullDocs() {
 function cloudSessionChanged() {
   if (!cloudUser) return;
   sessionPending = true;
-  clearTimeout(sessionTimer);
-  sessionTimer = setTimeout(pushSession, 3000);
+  // como mucho 1,5 s después del primer cambio (aunque se sigan haciendo cambios), para el modo espectador
+  if (sessionTimer) return;
+  sessionTimer = setTimeout(() => { sessionTimer = null; pushSession(); }, 1500);
 }
 
 let syncTimer = null;

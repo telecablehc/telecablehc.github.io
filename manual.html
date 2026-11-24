@@ -118,7 +118,7 @@
       <ol><li><a href="#c1-instalar">Instalar la app</a></li><li><a href="#c1-cuenta">Iniciar sesión</a></li><li><a href="#c1-offline">Sin internet y actualizaciones</a></li><li><a href="#c1-nube">El punto de sincronización</a></li></ol></li>
     <li><a href="#c2">La pantalla de inicio y la navegación</a></li>
     <li><a href="#c3">Partidos: el menú y el calendario</a>
-      <ol><li><a href="#c3-oficial">Partidos cerrados e incompletos</a></li></ol></li>
+      <ol><li><a href="#c3-directo">Ver un partido en directo</a></li><li><a href="#c3-oficial">Partidos cerrados e incompletos</a></li></ol></li>
     <li><a href="#c4">Durante el partido</a>
       <ol><li><a href="#c4-convocatoria">Convocatoria</a></li><li><a href="#c4-reloj">Reloj, pista y banquillo</a></li><li><a href="#c4-acciones">Registrar acciones</a></li><li><a href="#c4-pestanas">Las pestañas</a></li><li><a href="#c4-terminar">Fin de parte y terminar</a></li></ol></li>
     <li><a href="#c5">Después del partido: resumen y correcciones</a></li>
@@ -212,6 +212,7 @@
   <p>Al entrar en <span class="ui">Partidos</span> verás, de arriba abajo:</p>
   <ul>
     <li><b>Próximo partido</b> (o <b>Continuar partido</b> si hay uno en curso): un toque y empiezas a registrar esa jornada con el rival, la fecha, la hora y el pabellón ya rellenados.</li>
+    <li><b>En directo</b> (solo si alguien está registrando un partido en otro dispositivo): ver <a href="#c3-directo">Ver un partido en directo</a>.</li>
     <li><span class="ui">Totales</span>: la suma de todos los partidos (capítulo 6).</li>
     <li><b>Calendario</b> de la OK Liga Iberdrola 2026/2027: un botón por jornada.</li>
     <li><b>Historial</b> de partidos guardados.</li>
@@ -223,6 +224,16 @@
     <li>Color de las jornadas <b>cerradas</b>: <span class="dot" style="background:#1f9d55"></span>victoria, <span class="dot" style="background:#e07b00"></span>empate, <span class="dot" style="background:#d64545"></span>derrota.</li>
     <li>Toca una jornada jugada para ver su resumen; toca una pendiente para empezar a registrarla.</li>
   </ul>
+  <h3 id="c3-directo">Ver un partido en directo (modo espectador)</h3>
+  <p>Mientras otra persona del equipo registra un partido, cualquier miembro puede <b>seguirlo en directo</b> desde su móvil, tablet u ordenador, sin poder cambiar nada.</p>
+  <ul>
+    <li>En <span class="ui">Partidos</span> aparece el apartado <b>En directo</b> con una tarjeta por partido en curso (<span class="dot" style="background:#d64545"></span> marcador, parte, reloj y quién lo registra). Tócala.</li>
+    <li>Verás el <b>reloj</b> (corre solo), el <b>marcador</b>, la posesión, las faltas de equipo de la parte, las sanciones activas, las jugadoras <b>en pista y en el banquillo</b> con sus minutos, la lista de <b>eventos</b> y el <b>resumen estadístico</b> completo.</li>
+    <li>Los datos se actualizan solos: cada cambio llega en unos <b>3–5 segundos</b>. Arriba pone «actualizado hace…».</li>
+    <li>Si el reloj está parado sale <b>⏸ Reloj parado</b>; si el dispositivo que registra se queda sin internet, aparece un aviso y se ven los últimos datos recibidos.</li>
+    <li>Cuando se termina el partido sale <b>Terminado</b>, y el partido aparece en el historial al sincronizar.</li>
+  </ul>
+  <div class="note"><b>Hace falta internet</b>Tanto quien registra como quien mira tienen que tener conexión. Es solo para ver: el partido se sigue registrando en un único dispositivo.</div>
   <h3 id="c3-oficial">Partidos cerrados e incompletos (resultado oficial de la RFEP)</h3>
   <p>El marcador de la app tiene que coincidir siempre con el <b>resultado oficial de la RFEP</b>. Un partido solo está <b>cerrado</b> (y se pinta de verde, naranja o rojo) cuando coinciden. Si no, sale <b>rayado en gris</b> con un aviso:</p>
   <div class="tbl"><table>
@@ -512,7 +523,7 @@
   <!-- Añadir aquí cada cambio nuevo (arriba del todo) y actualizar la fecha de la portada -->
   <dl class="log">
     <dt>24/11/2026</dt>
-    <dd><ul><li>Cuentas con <b>acceso solo a Partidos</b>: no ven Entrenos ni Análisis de vídeo.</li><li>Entrenos: <b>dibujar paso a paso</b> («Solo este paso»): se ven solo las flechas del paso elegido, con las jugadoras donde terminan los pasos anteriores.</li></ul></dd>
+    <dd><ul><li>Partidos: <b>modo espectador</b> («En directo»): todos pueden seguir en tiempo real el partido que otra persona está registrando (reloj, marcador, minutos, eventos y resumen).</li><li>Cuentas con <b>acceso solo a Partidos</b>: no ven Entrenos ni Análisis de vídeo.</li><li>Entrenos: <b>dibujar paso a paso</b> («Solo este paso»): se ven solo las flechas del paso elegido, con las jugadoras donde terminan los pasos anteriores.</li></ul></dd>
     <dt>23/11/2026</dt>
     <dd><ul><li>Análisis de vídeo: en cada botón se elige <b>cuántas jugadoras</b> se marcan (ninguna, 1 o hasta 5).</li><li>Análisis de vídeo: <b>atajos de teclado</b> en el ordenador para los botones de «Marcar acción» (1–0 en el Estándar; tecla a elegir en los teclados propios).</li><li>Análisis de vídeo: botón de <b>volumen</b> (silenciar y barra de volumen) en el partido y en los clips.</li><li>Análisis de vídeo: <b>leyendas en los clips</b> que salen unos segundos sin parar el vídeo (también en el clip descargado).</li>
       <li>Análisis de vídeo: la descarga de un clip ya no se queda colgada si el vídeo no avanza; avisa del problema.</li><li>Dibujos: nueva herramienta <b>T Texto</b> para poner <b>leyendas</b>, tanto en los entrenos como en el análisis de vídeo.</li>

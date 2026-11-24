@@ -696,6 +696,7 @@ function render() {
   if (route === 'biblioteca') renderLibrary();
   if (route === 'video') renderVideoList();
   if (route === 'analisis') renderAnalysis();
+  if (route === 'directo') renderLive();
 
   $('btnPlay').textContent = S.running ? '❚❚' : '▶';
   $('btnPlay').classList.toggle('running', S.running);
@@ -914,6 +915,7 @@ function fmtLong(ms) {
 
 // Actualiza solo los textos de tiempo (varias veces por segundo)
 function tick() {
+  liveTick(); // modo espectador (directo.js)
   if (route === 'inicio') renderHome();
   if ((route === 'partidos' || route === 'entrenos') && isStarted() && S.mode === modeOf(route)) {
     const sub = document.querySelector('#menuMain .menu-btn-sub');
@@ -969,7 +971,7 @@ function toast(msg) {
 // La pantalla va en la dirección (#partidos, #juego…), así el botón
 // «atrás» del móvil funciona.
 
-const ROUTES = ['inicio', 'partidos', 'entrenos', 'juego', 'totales', 'plan', 'biblioteca', 'video', 'analisis'];
+const ROUTES = ['inicio', 'partidos', 'entrenos', 'juego', 'totales', 'plan', 'biblioteca', 'video', 'analisis', 'directo'];
 let route = 'inicio';
 const routeStack = [];
 const sectionOf = (mode) => (mode === 'entreno' ? 'entrenos' : 'partidos');
@@ -977,7 +979,7 @@ const modeOf = (section) => (section === 'entrenos' ? 'entreno' : 'partido');
 
 function parentRoute(r) {
   if (r === 'juego') return sectionOf(S.mode);
-  if (r === 'totales') return 'partidos';
+  if (r === 'totales' || r === 'directo') return 'partidos';
   if (r === 'plan' || r === 'biblioteca') return 'entrenos';
   if (r === 'analisis') return 'video';
   return 'inicio';
@@ -1007,7 +1009,8 @@ function applyRoute() {
   if (route !== 'analisis') pauseAnalysisVideo(); // al salir del análisis, el vídeo se para
   if (route === 'plan') currentPlanId = arg || null;
   if (route === 'analisis') currentVideoId = arg || null;
-  const full = route + (route === 'plan' ? '/' + currentPlanId : route === 'analisis' ? '/' + currentVideoId : '');
+  if (route === 'directo' && !arg) { location.replace('#partidos'); return; }
+  const full = route + (route === 'plan' ? '/' + currentPlanId : route === 'analisis' ? '/' + currentVideoId : route === 'directo' ? '/' + arg : '');
   if (routeStack[routeStack.length - 2] === full) routeStack.pop();
   else if (routeStack[routeStack.length - 1] !== full) routeStack.push(full);
 
@@ -1017,6 +1020,7 @@ function applyRoute() {
   document.querySelectorAll('dialog[open]').forEach((d) => d.id !== 'dlgResults' && d.close());
   window.scrollTo(0, 0);
   render();
+  if (route === 'directo') openLive(arg);
   startupChecks();
 }
 
@@ -1029,6 +1033,7 @@ function renderHeader() {
     plan: 'Plan de entreno',
     biblioteca: 'Biblioteca de ejercicios',
     video: 'Análisis - Vídeo',
+    directo: 'En directo',
     analisis: (curVideo() || {}).titulo || 'Análisis',
     juego: S.mode === 'partido' ? `Partido${S.info.rival ? ' vs ' + S.info.rival : ''}` : `Entreno${S.info.objetivo ? ' · ' + S.info.objetivo : ''}`,
   };
@@ -1112,10 +1117,11 @@ function renderMenu() {
   $('menuCalBox').hidden = !isMatch;
   $('menuOther').hidden = !isMatch;
   $('menuPlanBox').hidden = isMatch;
-  if (!isMatch) renderEntrenosMenu();
+  if (!isMatch) { $('menuLive').hidden = true; renderEntrenosMenu(); }
   if (isMatch) {
     $('menuCalTitle').textContent = `Calendario · ${COMPETICION} ${TEMPORADA}`;
     renderCalendar(history);
+    renderLiveBox();
     // en "Otros partidos" solo los que no son de ninguna jornada del calendario
     const linked = new Set(CALENDARIO.map((f) => recordForFixture(f, history)).filter(Boolean).map((r) => r.id));
     $('menuHistTitle').textContent = 'Otros partidos (amistosos, copa…)';

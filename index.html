@@ -49,6 +49,11 @@
     <!-- ===== Partidos / Entrenos: menú de la sección ===== -->
     <section id="screen-menu" class="screen" hidden>
       <div id="menuMain"></div>
+      <!-- Solo en Partidos: partidos que otra persona está registrando ahora -->
+      <div id="menuLive" hidden>
+        <h2>En directo</h2>
+        <div id="menuLiveList"></div>
+      </div>
       <button id="menuTotals" class="menu-btn">
         <span class="menu-btn-title">Totales</span>
         <span class="menu-btn-sub">Suma de todos los partidos: equipo y jugadoras</span>
@@ -285,6 +290,12 @@
     </dialog>
 
     <!-- ===== Totales ===== -->
+    <!-- ===== Modo espectador: partido en directo (solo lectura) ===== -->
+    <section id="screen-directo" class="screen" hidden>
+      <div id="liveHead"></div>
+      <div id="liveBody"></div>
+    </section>
+
     <section id="screen-totales" class="screen" hidden>
       <div id="totals"></div>
     </section>
@@ -582,6 +593,7 @@
   <script src="entrenos.js"></script>
   <script src="hls.min.js"></script>
   <script src="video.js"></script>
+  <script src="directo.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

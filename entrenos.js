@@ -486,6 +486,8 @@ function itemMarkup(it, id, idx, opts = {}) {
   const at = (opts.pos && opts.pos[idx]) || it;
   const X = at.x * 40, Y = at.y * 20;
   const isArrow = ARROWS.includes(it.t);
+  // opts.only: solo se dibujan las flechas de ese paso (editor, «Solo este paso»)
+  if (isArrow && opts.only != null && stepOf(it) !== opts.only) return '';
   const faded = isArrow && opts.step != null && stepOf(it) !== opts.step;
   const g = (inner) => `<g data-i="${idx}"${faded ? ' opacity="0.25"' : ''}>${inner}</g>`;
   const label = (txt, fill) => `<text x="${X}" y="${Y + 0.3}" font-size="0.8" text-anchor="middle" font-weight="700" fill="${fill}">${escapeHtml(txt || '')}</text>`;
@@ -823,6 +825,14 @@ function openDrawEditor(dibujo, onDone) {
   let step = Math.max(1, maxStep(items)); // paso de las flechas nuevas
   let playing = null; // animación de prueba en marcha
   let vel = speedOf(dibujo); // velocidad de los movimientos
+  // «Solo este paso»: se ven solo las flechas del paso elegido, con las fichas donde terminan los pasos anteriores
+  let onlyStep = true;
+  const viewPos = () => {
+    if (!onlyStep || step <= 1) return {};
+    const tl = buildTimeline(items);
+    const prev = tl.segs.filter((s) => s.step < step);
+    return prev.length ? positionsAt(items, tl, Math.max(...prev.map((s) => s.t1))).pos : {};
+  };
   const svg = $('drawSvg');
   const dlg = $('dlgDraw');
   const snapshot = () => { undoList.push(JSON.stringify(items)); if (undoList.length > 50) undoList.shift(); };
@@ -845,8 +855,11 @@ function openDrawEditor(dibujo, onDone) {
   };
   // ¿Qué elemento hay bajo el dedo? (el de arriba primero)
   const hit = (p) => {
+    const vp = viewPos();
     for (let i = items.length - 1; i >= 0; i--) {
-      const it = items[i];
+      const it0 = items[i];
+      if (onlyStep && ARROWS.includes(it0.t) && stepOf(it0) !== step) continue; // flechas de otros pasos: no se ven
+      const it = vp[i] ? { ...it0, ...vp[i] } : it0;
       if (ARROWS.includes(it.t)) {
         const b = { x: it.x2, y: it.y2 };
         if (meters(p, it) < 0.9) return { i, part: 'a' };
@@ -861,7 +874,8 @@ function openDrawEditor(dibujo, onDone) {
   };
   const nextLabel = (t) => String(items.filter((x) => x.t === t).length + 1);
 
-  const redraw = (opts = { badges: true }) => {
+  const redraw = (opts = null) => {
+    if (!opts) opts = onlyStep ? { badges: true, only: step, pos: viewPos() } : { badges: true };
     const tmp = document.createElement('div');
     tmp.innerHTML = drawingSvg({ items }, drag && drag.preview, opts);
     svg.innerHTML = tmp.firstElementChild.innerHTML;
@@ -899,10 +913,18 @@ function openDrawEditor(dibujo, onDone) {
         box.innerHTML = '<span class="tool-label">Paso</span><span class="step-ctl"><button type="button">−</button><b></b><button type="button">+</button></span>';
         box.querySelector('b').textContent = step;
         const [minus, plus] = box.querySelectorAll('button');
-        minus.onclick = () => { step = Math.max(1, step - 1); drawTools(); };
-        plus.onclick = () => { step = Math.min(20, step + 1); drawTools(); };
+        minus.onclick = () => { stopPreview(); step = Math.max(1, step - 1); drawTools(); redraw(); };
+        plus.onclick = () => { stopPreview(); step = Math.min(20, step + 1); drawTools(); redraw(); };
+        minus.disabled = step <= 1;
         return box;
       })(),
+      // ver solo el paso que se está dibujando (menos líneas)
+      Object.assign(document.createElement('button'), {
+        type: 'button', className: 'tool tool-only' + (onlyStep ? ' active' : ''),
+        title: 'Ver solo las flechas del paso elegido, con las jugadoras donde terminan los pasos anteriores',
+        innerHTML: `<span class="tool-icon">${onlyStep ? '◉' : '◎'}</span><span class="tool-label">${onlyStep ? 'Solo este paso' : 'Todos los pasos'}</span>`,
+        onclick: () => { stopPreview(); onlyStep = !onlyStep; drawTools(); redraw(); },
+      }),
       // velocidad de los movimientos (se guarda con el dibujo; afecta también al vídeo descargado)
       (() => {
         const box = document.createElement('div');
@@ -935,12 +957,13 @@ function openDrawEditor(dibujo, onDone) {
         onclick: () => { if (items.length && confirm('¿Borrar todo el dibujo?')) { snapshot(); items = []; redraw(); } },
       }),
     );
-    $('drawHint').textContent = playing ? 'Viendo el movimiento. Pulsa «Parar» para seguir dibujando.' : DRAW_HINTS[tool] ||
+    const stepHint = onlyStep && step > 1 && !playing ? ` · Paso ${step}: las jugadoras están donde terminan los pasos anteriores.` : '';
+    $('drawHint').textContent = (playing ? 'Viendo el movimiento. Pulsa «Parar» para seguir dibujando.' : DRAW_HINTS[tool] ||
       (ARROWS.includes(tool)
         ? (tool === 'drive'
           ? `Dibuja con el dedo el recorrido de la conducción, por ejemplo entre los conos (paso ${step}).`
           : `Arrastra desde el inicio hasta el final de la flecha (paso ${step}). Las flechas del mismo paso se mueven a la vez.`)
-        : 'Toca la pista para colocarlo.');
+        : 'Toca la pista para colocarlo.')) + stepHint;
   };
 
   svg.onpointerdown = (ev) => {
@@ -959,6 +982,13 @@ function openDrawEditor(dibujo, onDone) {
     }
     if (tool === 'mover') {
       const h = hit(p);
+      if (h && !ARROWS.includes(items[h.i].t) && viewPos()[h.i]) {
+        const vp = viewPos()[h.i], it = items[h.i];
+        if (Math.hypot((vp.x - it.x) * 40, (vp.y - it.y) * 20) > 0.05) {
+          toast('Esta ficha se mueve en un paso anterior: para cambiar dónde empieza, ve al paso 1.');
+          return;
+        }
+      }
       if (h) { snapshot(); drag = { ...h, last: p }; capture(ev); }
       return;
     }

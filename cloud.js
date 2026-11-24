@@ -39,6 +39,12 @@ let sessionTimer = null;
 let sessionPending = false;
 let cloudStatus = { state: 'off', last: null, msg: '' }; // off | ok | syncing | offline | error
 
+// Acceso de la cuenta (columna "acceso" de miembros): 'todo' o 'partidos' (solo la sección Partidos)
+const onlyMatches = () => ((cloudUser || load(KEY_ACCOUNT, null) || {}).acceso === 'partidos');
+function applyAccess() {
+  document.body.classList.toggle('solo-partidos', onlyMatches());
+}
+
 const cloudEnabled = () => !!(CLOUD.url && CLOUD.key && window.supabase);
 const isNetworkError = (err) => !navigator.onLine || (err && /fetch|network|Retryable/i.test(`${err.name} ${err.message}`));
 
@@ -186,7 +192,7 @@ async function pullGames() {
   data.forEach((row) => {
     if (dirty.has(row.id)) return; // el cambio local, aún sin subir, manda
     history = history.filter((r) => r.id !== row.id);
-    if (!row.borrado && row.datos && row.datos.id) history.push(row.datos);
+    if (!row.borrado && row.datos && row.datos.id && !(onlyMatches() && row.datos.mode !== 'partido')) history.push(row.datos);
   });
   history.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
   store(KEY_HISTORY, history);
@@ -224,7 +230,7 @@ async function cloudSync() {
     let changed = await pullGames();
     if (sessionPending) await pushSession();
     // Planes y biblioteca: si falla (p. ej. falta la tabla), los partidos siguen sincronizando
-    try {
+    if (!onlyMatches()) try {
       await pushDocs();
       changed = (await pullDocs()) || changed;
       docsError = '';
@@ -395,8 +401,13 @@ async function afterLogin(user) {
     Object.entries(DOC_KEYS).forEach(([kind, key]) => load(key, []).forEach((x) => cloudMarkDoc(kind, x.id)));
   }
   store(KEY_OWNER, user.id);
-  cloudUser = { id: user.id, email: user.email };
+  // Acceso: si la función aún no existe en Supabase, acceso completo
+  const { data: acceso, error: accErr } = await sb.rpc('mi_acceso');
+  const prevAcc = (load(KEY_ACCOUNT, null) || {}).acceso || 'todo';
+  cloudUser = { id: user.id, email: user.email, acceso: !accErr && acceso === 'partidos' ? 'partidos' : 'todo' };
   store(KEY_ACCOUNT, cloudUser);
+  applyAccess();
+  if (cloudUser.acceso !== prevAcc) applyRoute();
   hideLogin();
   updateCloudUI();
   try { await pullSession(); } catch {}
@@ -411,6 +422,7 @@ async function cloudLogout() {
   await sb.auth.signOut().catch(() => {});
   store(KEY_ACCOUNT, null);
   cloudUser = null;
+  applyAccess();
   $('dlgSettings').close();
   showLogin('Has cerrado la sesión.');
 }
@@ -419,6 +431,7 @@ async function cloudLogout() {
 
 async function cloudInit() {
   updateCloudUI();
+  if (onlyMatches()) { applyAccess(); applyRoute(); }
   if (!cloudEnabled()) return;
 
   sb = window.supabase.createClient(CLOUD.url, CLOUD.key, {

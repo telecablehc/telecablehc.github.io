@@ -998,6 +998,12 @@ function applyRoute() {
   // dirección: "#partidos", "#juego", "#plan/<id>"…
   const [h, arg] = location.hash.slice(1).split('/');
   route = ROUTES.includes(h) ? h : 'inicio';
+  // Cuentas solo de partidos: Entrenos y Análisis no se abren
+  if (typeof onlyMatches === 'function' && onlyMatches() &&
+      (['entrenos', 'plan', 'biblioteca', 'video', 'analisis'].includes(route) || (route === 'juego' && S.mode !== 'partido'))) {
+    location.replace('#partidos');
+    return;
+  }
   if (route !== 'analisis') pauseAnalysisVideo(); // al salir del análisis, el vídeo se para
   if (route === 'plan') currentPlanId = arg || null;
   if (route === 'analisis') currentVideoId = arg || null;

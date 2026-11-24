@@ -629,3 +629,7 @@ dialog.clip-dialog { width: min(1100px, calc(100vw - 12px)); max-height: 96vh; p
 .kb-row button:disabled { opacity: .3; }
 #kbPreview .va-tag { pointer-events: none; min-height: 40px; }
 #dvTeclado { padding: 10px; font-size: 15px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); }
+
+/* Cuentas con acceso solo a Partidos */
+.solo-partidos .home-btn[data-go="entrenos"],
+.solo-partidos .home-btn[data-go="video"] { display: none; }

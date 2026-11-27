@@ -353,7 +353,7 @@ function renderStatBox(v) {
   $('vaStatInfo').textContent = !v.partido
     ? 'Para usarlo, une el análisis a una jornada en «Editar datos».'
     : on
-      ? `Gol a favor, Gol en contra, Falta y Bola parada se suman al partido (se pide la parte y el minuto). Marcador guardado: ${sc ? sc.score.join('-') : '0-0'}.`
+      ? `Gol a favor, Gol en contra, Falta y Bola parada se suman al partido (se pide la parte y el minuto). Marcador guardado: ${sc ? sc.text : '0-0'}.`
       : 'Desactivado: las acciones solo quedan en el análisis.';
 }
 
@@ -367,7 +367,7 @@ function toggleStats() {
   }
   if (want) {
     const sc = videoStatScore(v.partido);
-    if (sc && sc.events && !confirm(`Este partido ya tiene datos guardados (marcador ${sc.score.join('-')}). Las acciones que marques se sumarán a ellos: si ya se apuntaron en directo, saldrán dobles. ¿Activar?`)) {
+    if (sc && sc.events && !confirm(`Este partido ya tiene datos guardados (marcador ${sc.text}). Las acciones que marques se sumarán a ellos: si ya se apuntaron en directo, saldrán dobles. ¿Activar?`)) {
       $('vaStats').checked = false;
       return;
     }

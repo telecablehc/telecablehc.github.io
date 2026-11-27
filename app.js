@@ -177,6 +177,21 @@ function score(X, uptoIndex = Infinity) {
   return [us, them];
 }
 
+// Orden de la RFEP: primero el equipo local. En casa «Telecable HC x Rival 3-1»; fuera «Rival x Telecable HC 1-3».
+// El marcador interno sigue siendo siempre [nosotras, rival]; esto solo cambia cómo se enseña.
+function isAway(X) {
+  if (!X || X.mode !== 'partido') return false;
+  // info.local: 'casa' | 'fuera' (elegido en Datos, o del calendario al empezar la jornada)
+  if (X.info.local != null && X.info.local !== '') return X.info.local === false || X.info.local === 'fuera';
+  const f = X.info.fixtureId && CALENDARIO.find((x) => x.id === X.info.fixtureId);
+  return !!(f && !f.local);
+}
+const homeFirst = (X, us, them) => (isAway(X) ? [them, us] : [us, them]);
+const matchTitle = (X, sep = ' x ') => homeFirst(X, X.info.team || 'Nosotras', X.info.rival || 'Rival').join(sep);
+const scoreText = (X, sep = '-', s = score(X)) => homeFirst(X, s[0], s[1]).join(sep);
+// "a-b" guardado como [nosotras-rival] → en orden local-visitante
+const flipRes = (away, r) => (r && away ? r.split('-').reverse().join('-') : r);
+
 // ---------- Jugadoras ----------
 
 function closeStint(p, t) {
@@ -317,6 +332,7 @@ function startSession(mode, fixture = null, plan = null) {
       Object.assign(S.info, {
         fixtureId: fixture.id,
         rival: fixture.rival,
+        local: fixture.local ? 'casa' : 'fuera',
         competicion: `${COMPETICION} ${TEMPORADA}`,
         jornada: String(fixture.jornada),
         fecha: fixture.fecha || today(),
@@ -657,7 +673,7 @@ function describe(X, e) {
   const i = X.events.indexOf(e);
   switch (e.type) {
     case 'gol': {
-      const [a, b] = score(X, i);
+      const [a, b] = homeFirst(X, ...score(X, i));
       const via = e.via !== 'juego' ? ` (${VIA[e.via]})` : '';
       return `Gol ${e.side === 'favor' ? 'a favor' : 'en contra'}${via} · ${whoText(X, e)} · ${a}-${b}`;
     }
@@ -704,16 +720,15 @@ function render() {
   $('partLabel').textContent = partName(S, S.part);
 
   // Marcador
-  const [us, them] = score(S);
-  $('scoreUs').textContent = us;
-  $('scoreThem').textContent = them;
-  $('teamName').textContent = S.info.team || 'Nosotras';
-  $('rivalName').textContent = S.info.rival || 'Rival';
+  // en orden de la RFEP: a la izquierda el equipo local
+  const [left, right] = homeFirst(S, ...score(S));
+  $('scoreUs').textContent = left;
+  $('scoreThem').textContent = right;
+  [$('teamName').textContent, $('rivalName').textContent] = homeFirst(S, S.info.team || 'Nosotras', S.info.rival || 'Rival');
 
   // Posesión y faltas
   document.querySelectorAll('[data-poss]').forEach((b) => b.classList.toggle('active', b.dataset.poss === S.poss));
-  $('foulsUs').textContent = foulCount('nuestra');
-  $('foulsThem').textContent = foulCount('rival');
+  [$('foulsUs').textContent, $('foulsThem').textContent] = homeFirst(S, foulCount('nuestra'), foulCount('rival'));
 
   // Jugadoras
   const called = S.players.filter((p) => p.called);
@@ -896,7 +911,7 @@ function renderTotals() {
     const res = us > them ? 'G' : us === them ? 'E' : 'P';
     return tr([
       (r.info.fecha || '').split('-').reverse().join('/'), e(r.info.rival) || '—', e(r.info.competicion) || '—',
-      `<b>${us}-${them}</b> <span class="res res-${res}">${res}</span>`,
+      `<b>${scoreText(r)}</b> <span class="res res-${res}">${res}</span>`,
       `<button class="ghost small" data-open="${e(r.id)}">Ver</button>`,
     ]);
   }));
@@ -1044,9 +1059,8 @@ function renderHeader() {
 
 // Texto corto del estado de la sesión en curso ("2-1 · 2ª parte 12:30 · en juego")
 function sessionStatus() {
-  const [us, them] = score(S);
   const parts = [];
-  if (S.mode === 'partido') parts.push(`${S.info.rival ? S.info.rival + ' · ' : ''}${us}-${them}`);
+  if (S.mode === 'partido') parts.push(`${S.info.rival ? S.info.rival + ' · ' : ''}${scoreText(S)}`);
   parts.push(`${partName(S, S.part)} ${fmt(partNow())}`);
   parts.push(S.running ? 'en juego' : 'en pausa');
   return parts.join(' · ');
@@ -1147,7 +1161,7 @@ function fixtureStatus(f, rec, history) {
   if (!f) return { state: 'none' };
   if (isLiveFixture(f, rec)) return { state: 'live' };
   const oficial = officialResult(f, rec);
-  const app = rec ? score(rec).join('-') : '';
+  const app = rec ? score(rec).join('-') : ''; // [nosotras-rival], como el oficial guardado
   const played = !!rec || !!oficial || (f.fecha && f.fecha < today());
   if (!played) return { state: 'upcoming' };
   if (!rec) return { state: 'noData', oficial };
@@ -1160,9 +1174,10 @@ function officialBanner(rec) {
   const f = rec.info.fixtureId && CALENDARIO.find((x) => x.id === rec.info.fixtureId);
   if (!f || rec.mode !== 'partido') return '';
   const st = fixtureStatus(f, rec);
+  const fl = (r) => flipRes(!f.local, r);
   const link = ` <a href="${RFEP_URL}" target="_blank" rel="noopener">Ver en la RFEP ↗</a>`;
-  if (st.state === 'closed') return `<p class="banner ok-banner">✓ Partido cerrado: coincide con el resultado oficial de la RFEP (${st.oficial}).</p>`;
-  if (st.state === 'mismatch') return `<p class="banner incomplete-banner">⚠ <b>Partido incompleto</b>: la app tiene ${st.app} y el resultado oficial de la RFEP es ${st.oficial}. Corrige los goles en «Editar datos» → Eventos (o el resultado oficial en Datos).${link}</p>`;
+  if (st.state === 'closed') return `<p class="banner ok-banner">✓ Partido cerrado: coincide con el resultado oficial de la RFEP (${fl(st.oficial)}).</p>`;
+  if (st.state === 'mismatch') return `<p class="banner incomplete-banner">⚠ <b>Partido incompleto</b>: la app tiene ${fl(st.app)} y el resultado oficial de la RFEP es ${fl(st.oficial)}. Corrige los goles en «Editar datos» → Eventos (o el resultado oficial en Datos).${link}</p>`;
   if (st.state === 'noOfficial') return `<p class="banner incomplete-banner">⚠ <b>Partido incompleto</b>: falta el resultado oficial de la RFEP. Escríbelo en «Editar datos» → Datos.${link}</p>`;
   return '';
 }
@@ -1187,11 +1202,12 @@ function renderCalendar(history) {
     b.querySelector('small').textContent = `${fixtureWhen(f)} · ${venueIcon(f)}`;
     b.querySelector('small').title = f.local ? 'En casa' : 'Fuera';
     let state = '';
-    if (live) state = `● ${score(S).join('-')}`;
-    else if (st.state === 'closed') state = `✓ ${st.app}`;
-    else if (st.state === 'mismatch') state = `⚠ Incompleto\nApp ${st.app} · RFEP ${st.oficial}`;
-    else if (st.state === 'noOfficial') state = `⚠ Incompleto\n${st.app} · falta RFEP`;
-    else if (st.state === 'noData') state = `⚠ Sin datos${st.oficial ? `\nRFEP ${st.oficial}` : ''}`;
+    const fl = (r) => flipRes(!f.local, r); // resultados en orden local-visitante, como la RFEP
+    if (live) state = `● ${scoreText(S)}`;
+    else if (st.state === 'closed') state = `✓ ${fl(st.app)}`;
+    else if (st.state === 'mismatch') state = `⚠ Incompleto\nApp ${fl(st.app)} · RFEP ${fl(st.oficial)}`;
+    else if (st.state === 'noOfficial') state = `⚠ Incompleto\n${fl(st.app)} · falta RFEP`;
+    else if (st.state === 'noData') state = `⚠ Sin datos${st.oficial ? `\nRFEP ${fl(st.oficial)}` : ''}`;
     b.querySelector('.fx-state').textContent = state;
     b.title = live ? 'Partido en curso'
       : st.state === 'closed' ? 'Partido cerrado (coincide con la RFEP)'
@@ -1245,7 +1261,7 @@ function renderSummary() {
 
 function renderDatos() {
   document.querySelectorAll('[data-info]').forEach((el) => {
-    if (el !== document.activeElement) el.value = S.info[el.dataset.info] || '';
+    if (el !== document.activeElement) el.value = el.dataset.info === 'local' ? (isAway(S) ? 'fuera' : 'casa') : S.info[el.dataset.info] || '';
   });
   const called = S.players.filter((p) => p.called);
   $('calledList').textContent = called.length
@@ -1261,7 +1277,7 @@ function summaryHtml(X) {
   const nParts = X.partMs.length;
   const parts = [...Array(nParts).keys()];
   const total = sum(X.partMs);
-  const sc = (i) => score(X, i).join('-');
+  const sc = (i) => scoreText(X, '-', score(X, i));
   const nums = (arr) => (arr || []).map((n) => `${n} ${e(name(n))}`).join(', ') || '—';
   const fecha = X.info.fecha ? X.info.fecha.split('-').reverse().join('/') : '';
   const called = rosterOrder(X.players.filter((p) => p.called));
@@ -1273,12 +1289,12 @@ function summaryHtml(X) {
   const ev = (type) => X.events.filter((x) => x.type === type);
 
   // Datos
-  let h = `<img class="sum-logo" src="crest.png" alt=""><h3>${e(X.info.team || 'Nosotras')} x ${e(X.info.rival || 'Rival')} — Resumen estadístico${
+  let h = `<img class="sum-logo" src="crest.png" alt=""><h3>${e(X.mode === 'partido' ? matchTitle(X) : (X.info.team || 'Nosotras'))} — Resumen estadístico${
     X.mode === 'entreno' ? ' (entreno)' : X.info.numero ? ` · Partido oficial nº ${e(X.info.numero)}` : ''}</h3>
     <p class="meta">Competición: <b>${e(X.info.competicion) || '—'}</b> · Fecha: <b>${fecha || '—'}</b> ·
     Jornada: <b>${e(X.info.jornada) || '—'}</b> · Hora: <b>${e(X.info.hora) || '—'}</b> ·
     ${X.info.pabellon ? `Pabellón: <b>${e(X.info.pabellon)}</b> ·` : ''}
-    Resultado: <b>${score(X).join(' - ')}</b></p>`;
+    Resultado: <b>${scoreText(X, ' - ')}</b></p>`;
 
   h += `<p><b>Convocadas:</b> ${called.map((p) => `${p.num} ${e(p.name)}`).join(', ')}</p>`;
   h += parts.map((i) => `<p><b>Cinco inicial ${partShort(i + 1)}:</b> ${nums(X.starters[i])}</p>`).join('');
@@ -1383,7 +1399,7 @@ function summaryHtml(X) {
   const ppRow = (s) => {
     const end = s.scoreEnd || score(X);
     const gf = end[0] - s.scoreStart[0], gc = end[1] - s.scoreStart[1];
-    return tr([`${when(s.part, s.t)} → ${endText(s)}`, s.scoreStart.join('-'), nums(s.five), end.join('-'), `+${gf} / −${gc}`, whoText(X, s)]);
+    return tr([`${when(s.part, s.t)} → ${endText(s)}`, scoreText(X, '-', s.scoreStart), nums(s.five), scoreText(X, '-', end), `+${gf} / −${gc}`, whoText(X, s)]);
   };
   h += '<h4>Superioridad (power play)</h4>';
   h += table(['Tiempo', 'Res. inicial', 'Jugadoras en pista', 'Res. final', 'Goles', 'Sancionada'], sanc.filter((s) => s.side === 'rival').map(ppRow), 'Sin superioridades');
@@ -1517,7 +1533,7 @@ function editRecord(rec) {
   const editedSanctions = [];
   let tab = 'datos';
 
-  dlg.querySelectorAll('[data-rec]').forEach((el) => (el.value = X.info[el.dataset.rec] || ''));
+  dlg.querySelectorAll('[data-rec]').forEach((el) => (el.value = el.dataset.rec === 'local' ? (isAway(X) ? 'fuera' : 'casa') : X.info[el.dataset.rec] || ''));
   const fx = X.mode === 'partido' && X.info.fixtureId ? CALENDARIO.find((f) => f.id === X.info.fixtureId) : null;
   $('recOfWrap').hidden = !fx;
   if (fx) {
@@ -1525,11 +1541,16 @@ function editRecord(rec) {
     $('recOfUs').value = oa || '';
     $('recOfThem').value = ob || '';
     $('recOfLink').href = RFEP_URL;
+    // como en el acta: primero el equipo local
+    $('recOfRow').classList.toggle('away', !fx.local);
+    $('recOfUsName').textContent = X.info.team || 'Telecable HC';
+    $('recOfThemName').textContent = fx.rival || 'Rival';
     const drawOf = () => {
       const a = $('recOfUs').value.trim(), b = $('recOfThem').value.trim();
       const app = score(X).join('-');
+      const fl = (r) => flipRes(!fx.local, r);
       $('recOfHint').textContent = !a && !b ? 'Sin resultado oficial: el partido saldrá como incompleto.'
-        : `${a}-${b}` === app ? `✓ Coincide con el marcador de la app (${app}).` : `⚠ No coincide con el marcador de la app (${app}): el partido saldrá como incompleto.`;
+        : `${a}-${b}` === app ? `✓ Coincide con el marcador de la app (${fl(app)}).` : `⚠ No coincide con el marcador de la app (${fl(app)}): el partido saldrá como incompleto.`;
     };
     $('recOfUs').oninput = $('recOfThem').oninput = drawOf;
     drawOf();
@@ -1932,7 +1953,7 @@ function videoStatParts(fixtureId) {
 function videoStatScore(fixtureId) {
   const f = CALENDARIO.find((x) => x.id === fixtureId);
   const rec = f && recordForFixture(f, load(KEY_HISTORY, []));
-  return rec ? { score: score(rec), events: rec.events.length } : null;
+  return rec ? { score: score(rec), text: scoreText(rec), events: rec.events.length } : null;
 }
 
 // Suma una acción al partido de la jornada. Devuelve { rec, ids, part, t } o un texto de error.
@@ -1975,7 +1996,7 @@ function removeVideoStat(stat) {
 }
 
 function recordTitle(rec) {
-  return rec.mode === 'partido' ? `${rec.info.team || 'Nosotras'} x ${rec.info.rival || 'Rival'}` : 'Entreno';
+  return rec.mode === 'partido' ? matchTitle(rec) : 'Entreno';
 }
 
 // Lista de partidos o entrenos terminados (en el menú de cada sección)
@@ -1993,7 +2014,7 @@ function renderHistory(mode, list, filter = () => true) {
       open.className = 'open';
       const fecha = (rec.info.fecha || '').split('-').reverse().join('/');
       open.innerHTML = '<b></b><small></small>';
-      open.querySelector('b').textContent = `${recordTitle(rec)}  ${score(rec).join('-')}`;
+      open.querySelector('b').textContent = `${recordTitle(rec)}  ${scoreText(rec)}`;
       open.querySelector('small').textContent = `${fecha} · ${rec.info.competicion || ''} · ${fmt(sum(rec.partMs))}`;
       open.onclick = () => showRecord(rec);
       const del = document.createElement('button');
@@ -2234,8 +2255,7 @@ document.querySelectorAll('[data-info]').forEach((el) => {
   el.oninput = () => {
     S.info[el.dataset.info] = el.value;
     save();
-    $('teamName').textContent = S.info.team || 'Nosotras';
-    $('rivalName').textContent = S.info.rival || 'Rival';
+    render(); // nombres y marcador (el orden depende de en casa / fuera)
   };
 });
 

@@ -375,6 +375,7 @@
         <div class="form">
           <label>Nuestro equipo <input data-info="team" type="text"></label>
           <label>Rival <input data-info="rival" type="text"></label>
+          <label>Jugamos <select data-info="local"><option value="casa">En casa</option><option value="fuera">Fuera</option></select></label>
           <label>Competición <input data-info="competicion" type="text"></label>
           <label>Jornada <input data-info="jornada" type="text"></label>
           <label>Partido oficial nº <input data-info="numero" type="text" inputmode="numeric"></label>
@@ -474,6 +475,7 @@
     <div class="form">
       <label>Nuestro equipo <input data-rec="team" type="text"></label>
       <label>Rival <input data-rec="rival" type="text"></label>
+      <label>Jugamos <select data-rec="local"><option value="casa">En casa</option><option value="fuera">Fuera</option></select></label>
       <label>Competición <input data-rec="competicion" type="text"></label>
       <label>Jornada <input data-rec="jornada" type="text"></label>
       <label>Partido oficial nº <input data-rec="numero" type="text" inputmode="numeric"></label>
@@ -484,10 +486,10 @@
     <div id="recOfWrap" class="official" hidden>
           <h4>Resultado oficial (RFEP)</h4>
           <p class="hint">Cópialo del acta de la RFEP. El partido solo queda cerrado si coincide con el marcador de la app. <a id="recOfLink" target="_blank" rel="noopener">Ver en la RFEP ↗</a></p>
-          <div class="official-row">
-            <label>Telecable HC <input id="recOfUs" type="text" inputmode="numeric" maxlength="2"></label>
+          <div id="recOfRow" class="official-row">
+            <label><span id="recOfUsName">Telecable HC</span> <input id="recOfUs" type="text" inputmode="numeric" maxlength="2"></label>
             <span>–</span>
-            <label>Rival <input id="recOfThem" type="text" inputmode="numeric" maxlength="2"></label>
+            <label><span id="recOfThemName">Rival</span> <input id="recOfThem" type="text" inputmode="numeric" maxlength="2"></label>
           </div>
           <p id="recOfHint" class="hint"></p>
     </div>

@@ -69,12 +69,11 @@ function renderLiveBox() {
   const list = $('menuLiveList');
   list.replaceChildren(...liveList.map((r) => {
     const X = liveSnapshot(r.datos);
-    const [us, them] = score(X);
     const b = document.createElement('button');
     b.className = 'menu-btn live-card';
     b.innerHTML = `<span class="menu-btn-title"><span class="live-dot"></span> <span class="t"></span></span>
       <span class="menu-btn-sub"></span>`;
-    b.querySelector('.t').textContent = `${X.info.team || 'Nosotras'} ${us}–${them} ${X.info.rival || 'Rival'}`;
+    b.querySelector('.t').textContent = (() => { const [a, b2] = homeFirst(X, X.info.team || 'Nosotras', X.info.rival || 'Rival'); return `${a} ${scoreText(X, '–')} ${b2}`; })();
     b.querySelector('.menu-btn-sub').textContent =
       `${partName(X, X.part)} · ${fmt(X.partMs[X.part - 1])}${r.datos.running ? '' : ' (parado)'}` +
       (r.email ? ` · lo registra ${r.email}` : '');
@@ -147,7 +146,8 @@ function renderLive() {
   const X = liveSnapshot(D);
   const part = X.partMs[X.part - 1];
   const total = sum(X.partMs);
-  const [us, them] = score(X);
+  const [us, them] = homeFirst(X, ...score(X));       // en orden local-visitante (RFEP)
+  const [nameL, nameR] = homeFirst(X, X.info.team || 'Nosotras', X.info.rival || 'Rival');
   const fouls = (side) => X.events.filter((ev) => ev.type === 'falta' && ev.side === side && ev.part === X.part).length;
   const age = Date.now() - new Date(liveRow.actualizado).getTime();
 
@@ -180,16 +180,16 @@ function renderLive() {
         <div class="sub${rem.startsWith('Tiempo') ? ' over' : ''}">${rem || 'Total ' + fmt(total)}</div>
       </div>
       <div class="score">
-        <div class="team">${e(X.info.team || 'Nosotras')}</div>
+        <div class="team">${e(nameL)}</div>
         <div class="goals"><span>${us}</span><span class="dash">–</span><span>${them}</span></div>
-        <div class="team">${e(X.info.rival || 'Rival')}</div>
+        <div class="team">${e(nameR)}</div>
       </div>
       <div class="clock-row">
         <div class="poss"><span class="lbl">Posesión</span>
           <span class="live-pill${X.poss === 'us' ? ' active' : ''}">Nosotras <b>${pct(X.possMs[X.part - 1][0], part)}</b></span>
           <span class="live-pill${X.poss === 'them' ? ' active' : ''}">Rival <b>${pct(X.possMs[X.part - 1][1], part)}</b></span>
         </div>
-        <div class="fouls" title="Faltas de equipo en esta parte">FE <b>${fouls('nuestra')}</b> · <b>${fouls('rival')}</b></div>
+        <div class="fouls" title="Faltas de equipo en esta parte">FE <b>${homeFirst(X, fouls('nuestra'), fouls('rival'))[0]}</b> · <b>${homeFirst(X, fouls('nuestra'), fouls('rival'))[1]}</b></div>
       </div>
       <div class="chips">${sanc.map((ev) => `<span class="chip ${ev.card}">${ev.side === 'nuestra' ? 'Inferioridad' : 'Superioridad'} · ${e(whoText(X, ev))} <b>${fmt(ev.abs + ev.dur - total)}</b></span>`).join('')}</div>
     </section>`;
